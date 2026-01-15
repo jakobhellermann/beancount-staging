@@ -4,29 +4,29 @@ Tools for reviewing and staging beancount transactions.
 
 ## Usage
 
-Compare journal and staging files:
+Show differences between journal and staging:
 
 ```bash
-cargo run -p beancount-staging-cli -- -j journal.beancount -s staging.beancount show
+beancount-staging -j journal.beancount -s staging.beancount show
 ```
 
 Interactive TUI review:
 
 ```bash
-cargo run -p beancount-staging-cli -- -j journal.beancount -s staging.beancount review
+beancount-staging -j journal.beancount -s staging.beancount review
 ```
 
 Web UI:
 
 ```bash
-cargo run -p beancount-staging-web -- -j journal.beancount -s staging.beancount
+beancount-staging -j journal.beancount -s staging.beancount web
 ```
 
 ## Development
 
 ```bash
-just cli show          # Run CLI show command
-just cli review        # Run TUI
+just cli show         # Show diff
+just cli review       # Run TUI
 just web              # Run web server
 just check            # Format, lint, test
 ```
