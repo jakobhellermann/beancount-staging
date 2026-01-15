@@ -1,24 +1,7 @@
-interface Transaction {
-  index: number;
-  content: string;
-}
-
-interface TransactionResponse {
-  transaction: Transaction;
-  expense_account: string | null;
-}
-
-interface InitResponse {
-  items: Transaction[];
-  current_index: number;
-}
-
-interface CommitResponse {
-  ok: boolean;
-  remaining_count: number;
-}
+import { ApiClient } from "./api";
 
 class StagingApp {
+  private api = new ApiClient();
   private currentIndex = 0;
   private totalCount = 0;
   private currentAccount = "";
@@ -72,12 +55,7 @@ class StagingApp {
 
   async init() {
     try {
-      const resp = await fetch("/api/init");
-      if (!resp.ok) {
-        throw new Error(`Failed to initialize: ${resp.statusText}`);
-      }
-
-      const data: InitResponse = await resp.json();
+      const data = await this.api.init();
 
       if (data.items.length === 0) {
         this.showSuccess("No transactions to review!");
@@ -105,12 +83,7 @@ class StagingApp {
         await this.saveAccount();
       }
 
-      const resp = await fetch(`/api/transaction/${this.currentIndex}`);
-      if (!resp.ok) {
-        throw new Error(`Failed to load transaction: ${resp.statusText}`);
-      }
-
-      const data: TransactionResponse = await resp.json();
+      const data = await this.api.getTransaction(this.currentIndex);
 
       this.transactionEl.textContent = data.transaction.content;
       this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.totalCount}`;
@@ -131,15 +104,7 @@ class StagingApp {
     }
 
     try {
-      const resp = await fetch(`/api/transaction/${this.currentIndex}/account`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expense_account: this.currentAccount }),
-      });
-
-      if (!resp.ok) {
-        throw new Error(`Failed to save account: ${resp.statusText}`);
-      }
+      await this.api.saveAccount(this.currentIndex, this.currentAccount);
     } catch (err) {
       this.showError(`Failed to save account: ${err}`);
       throw err;
@@ -157,17 +122,7 @@ class StagingApp {
       await this.saveAccount();
 
       // Commit transaction
-      const resp = await fetch(`/api/transaction/${this.currentIndex}/commit`, {
-        method: "POST",
-      });
-
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => null);
-        const errorMsg = errorData?.error ?? resp.statusText;
-        throw new Error(errorMsg);
-      }
-
-      const data: CommitResponse = await resp.json();
+      const data = await this.api.commitTransaction(this.currentIndex);
 
       if (data.remaining_count === 0) {
         this.showSuccess("All transactions committed!");
