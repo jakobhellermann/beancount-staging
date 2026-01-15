@@ -4,11 +4,20 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "beancount-staging"
+path = "src/main.rs"
+
 [dependencies]
 anstyle = "1.0"
 anyhow.workspace = true
 beancount-parser.workspace = true
 beancount-staging = { path = "../beancount-staging" }
+beancount-staging-web = { path = "../beancount-staging-web" }
 clap = { version = "4.5", features = ["derive"] }
-ratatui = "0.30"
 crossterm = "0.29"
+ratatui = { version = "0.30", default-features = false, features = [
+  "crossterm",
+  "underline-color",
+] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

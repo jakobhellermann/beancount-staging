@@ -6,45 +6,27 @@ use axum::{
     Router,
     routing::{get, post},
 };
-use clap::Parser;
-use std::path::PathBuf;
+use std::{
+    net::{Ipv4Addr, SocketAddrV4},
+    path::PathBuf,
+};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 use state::AppState;
 
-#[derive(Parser)]
-#[command(name = "beancount-staging-web")]
-#[command(about = "Web server for interactive beancount staging")]
-struct Args {
-    /// Journal file paths
-    #[arg(short, long, required = true)]
-    journal: Vec<PathBuf>,
-
-    /// Staging file paths
-    #[arg(short, long, required = true)]
-    staging: Vec<PathBuf>,
-
-    /// Port to listen on
-    #[arg(short, long, default_value = "8472")]
-    port: u16,
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Initialize tracing
-    tracing_subscriber::registry()
+pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> anyhow::Result<()> {
+    // Initialize tracing if not already initialized
+    let _ = tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "beancount_staging_web=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
-        .init();
-
-    let args = Args::parse();
+        .try_init();
 
     // Initialize application state
-    let state = AppState::new(args.journal, args.staging)?;
+    let state = AppState::new(journal, staging)?;
 
     // Build router with API routes first, then fallback to embedded static files
     let app = Router::new()
@@ -60,8 +42,9 @@ async fn main() -> anyhow::Result<()> {
         .fallback(static_files::static_handler);
 
     // Start server
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", args.port)).await?;
-    tracing::info!("Server listening on http://127.0.0.1:{}", args.port);
+    let listen = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
+    let listener = tokio::net::TcpListener::bind(listen).await?;
+    tracing::info!("Server listening on http://{}", listen);
 
     axum::serve(listener, app).await?;
 
