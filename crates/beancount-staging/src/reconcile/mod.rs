@@ -16,8 +16,8 @@ pub enum ReconcileItem {
 }
 
 pub struct ReconcileConfig {
-    journal_paths: Vec<PathBuf>,
-    staging_paths: Vec<PathBuf>,
+    pub journal_paths: Vec<PathBuf>,
+    pub staging_paths: Vec<PathBuf>,
 }
 impl ReconcileConfig {
     pub fn new(journal_paths: Vec<PathBuf>, staging_paths: Vec<PathBuf>) -> Self {

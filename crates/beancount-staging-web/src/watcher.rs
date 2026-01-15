@@ -44,7 +44,7 @@ impl FileWatcher {
         // Watch all provided paths
         for path in paths {
             info!("Watching path: {:?}", path);
-            debouncer.watch(&path, RecursiveMode::NonRecursive)?;
+            debouncer.watch(path, RecursiveMode::NonRecursive)?;
         }
 
         Ok(Self {

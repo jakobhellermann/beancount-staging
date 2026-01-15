@@ -1,6 +1,7 @@
 mod api;
 mod state;
 mod static_files;
+mod watcher;
 
 use axum::{
     Router,
@@ -13,7 +14,8 @@ use std::{
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
-use state::AppState;
+use state::{AppState, FileChangeEvent};
+use watcher::FileWatcher;
 
 pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> anyhow::Result<()> {
     // Initialize tracing if not already initialized
@@ -25,8 +27,26 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
         .with(tracing_subscriber::fmt::layer())
         .try_init();
 
-    // Initialize application state
-    let state = AppState::new(journal, staging)?;
+    // Initialize application state first
+    let (file_change_tx, _rx) = tokio::sync::broadcast::channel(100);
+    let state = AppState::new(journal.clone(), staging.clone(), file_change_tx.clone())?;
+
+    let state_for_watcher = state.clone();
+    let _watcher = FileWatcher::new(
+        journal.iter().chain(staging.iter()).map(AsRef::as_ref),
+        move || {
+            if let Err(e) = state_for_watcher.reload() {
+                tracing::error!("Failed to reload state: {}", e);
+            } else {
+                tracing::info!("State reloaded successfully");
+            }
+
+            // Then notify clients via SSE
+            if let Err(e) = state_for_watcher.file_change_tx.send(FileChangeEvent) {
+                tracing::error!("Failed to send SSE event: {}", e);
+            }
+        },
+    )?;
 
     // Build router with API routes first, then fallback to embedded static files
     let app = Router::new()
@@ -37,6 +57,7 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
             "/api/transaction/{index}/commit",
             post(api::commit_transaction),
         )
+        .route("/api/file-changes", get(api::file_changes_stream))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .fallback(static_files::static_handler);

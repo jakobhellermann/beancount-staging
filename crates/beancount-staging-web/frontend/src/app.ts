@@ -51,9 +51,26 @@ class StagingApp {
         }
       }
     });
+
+    // Set up SSE listener for file changes
+    this.setupFileChangeListener();
   }
 
-  async init() {
+  private setupFileChangeListener() {
+    const eventSource = new EventSource("/api/file-changes");
+
+    eventSource.onmessage = async () => {
+      console.log("File change detected, reloading data...");
+      await this.reloadData();
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE connection error:", error);
+      // Reconnection is handled automatically by EventSource
+    };
+  }
+
+  async reloadData() {
     try {
       const data = await this.api.init();
 
@@ -65,14 +82,20 @@ class StagingApp {
         this.commitBtn.disabled = true;
         this.prevBtn.disabled = true;
         this.nextBtn.disabled = true;
+        this.totalCount = 0;
         return;
       }
 
       this.totalCount = data.items.length;
-      this.currentIndex = 0;
+
+      // Adjust current index if it's now out of bounds
+      if (this.currentIndex >= this.totalCount) {
+        this.currentIndex = this.totalCount - 1;
+      }
+
       await this.loadTransaction();
     } catch (err) {
-      this.showError(`Failed to load transactions: ${err}`);
+      this.showError(`Failed to reload data: ${err}`);
     }
   }
 
@@ -182,4 +205,4 @@ class StagingApp {
 
 // Initialize app when DOM is ready
 const app = new StagingApp();
-app.init();
+app.reloadData();
