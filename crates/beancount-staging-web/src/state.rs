@@ -1,6 +1,6 @@
 use beancount_staging::Directive;
-use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, SourceSet};
-use std::collections::{HashMap, HashSet};
+use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, ReconcileState};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -16,11 +16,13 @@ pub struct AppState {
 
 pub struct AppStateInner {
     pub reconcile_config: ReconcileConfig,
-    pub staging_items: Vec<Directive>,
-    pub expense_accounts: HashMap<usize, String>,
+    pub reconcile_state: ReconcileState,
 
-    pub journal_sourceset: SourceSet,
-    pub staging_sourceset: SourceSet,
+    // derived data
+    pub staging_items: Vec<Directive>,
+
+    // changes in progress
+    pub expense_accounts: HashMap<usize, String>,
 }
 
 impl AppStateInner {
@@ -29,22 +31,20 @@ impl AppStateInner {
 
         AppStateInner {
             reconcile_config,
+            reconcile_state: ReconcileState::default(),
             staging_items: Vec::new(),
             expense_accounts: HashMap::new(),
-            journal_sourceset: HashSet::new(),
-            staging_sourceset: HashSet::new(),
         }
     }
 
     fn reload(&mut self) -> anyhow::Result<()> {
-        let results;
-        (results, self.journal_sourceset, self.staging_sourceset) =
-            self.reconcile_config.reconcile()?;
+        self.reconcile_state = self.reconcile_config.read()?;
+        let results = self.reconcile_state.reconcile()?;
 
         // Filter only staging items
         let staging_items: Vec<Directive> = results
             .iter()
-            .filter_map(|item| match item {
+            .filter_map(|item| match *item {
                 ReconcileItem::OnlyInStaging(directive) => Some(directive.clone()),
                 _ => None,
             })

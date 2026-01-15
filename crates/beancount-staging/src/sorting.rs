@@ -1,13 +1,16 @@
-use crate::Directive;
-use beancount_parser::DirectiveContent;
+use crate::{Directive, DirectiveContent};
 
 pub fn sort_dedup_directives(directives: &mut Vec<Directive>) {
-    directives.sort_by_key(directive_order);
+    directives.sort_by(|a, b| {
+        a.date
+            .cmp(&b.date)
+            .then_with(|| directive_order(&a.content).cmp(&directive_order(&b.content)))
+    });
     directives.dedup_by(|a, b| is_identical(a, b));
 }
 
-fn directive_order(directive: &Directive) -> u8 {
-    match directive.content {
+fn directive_order(directive: &DirectiveContent) -> u8 {
+    match directive {
         DirectiveContent::Open(_) => 0,
         DirectiveContent::Pad(_) => 1,
         DirectiveContent::Commodity(_) => 2,
