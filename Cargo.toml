@@ -2,6 +2,19 @@
 resolver = "3"
 members = ["crates/*"]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/jakobhellermann/beancount-staging"
+
+[workspace.dependencies]
+anyhow = "1.0"
+beancount-parser = "2.2"
+insta = "1.46"
+
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3
+
+[patch.crates-io]
+beancount-parser = { path = "/home/jakob/dev/rust/contrib/beancount-parser" }

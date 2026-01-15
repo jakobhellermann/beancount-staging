@@ -15,12 +15,12 @@ pub enum ReconcileItem {
     OnlyInStaging(Directive),
 }
 
-pub struct ReconcileConfig<'a> {
-    journal_paths: &'a [&'a str],
-    staging_paths: &'a [&'a str],
+pub struct ReconcileConfig {
+    journal_paths: Vec<PathBuf>,
+    staging_paths: Vec<PathBuf>,
 }
-impl<'a> ReconcileConfig<'a> {
-    pub fn new(journal_paths: &'a [&'a str], staging_paths: &'a [&'a str]) -> Self {
+impl ReconcileConfig {
+    pub fn new(journal_paths: Vec<PathBuf>, staging_paths: Vec<PathBuf>) -> Self {
         ReconcileConfig {
             journal_paths,
             staging_paths,
@@ -28,17 +28,17 @@ impl<'a> ReconcileConfig<'a> {
     }
     /// Try to associate all journal and staging items, returning a list of differences.
     pub fn reconcile(&self) -> Result<Vec<ReconcileItem>> {
-        let journal = read_directives_by_date(self.journal_paths)?;
-        let staging = read_directives_by_date(self.staging_paths)?;
+        let journal = read_directives_by_date(&self.journal_paths)?;
+        let staging = read_directives_by_date(&self.staging_paths)?;
 
         let results = reconcile(journal, staging);
         Ok(results)
     }
 }
 
-fn read_directives_by_date(path: &[&str]) -> Result<BTreeMap<Date, Vec<Directive>>> {
+fn read_directives_by_date(path: &[PathBuf]) -> Result<BTreeMap<Date, Vec<Directive>>> {
     let mut directives: BTreeMap<_, Vec<_>> = BTreeMap::new();
-    let files = path.iter().map(PathBuf::from);
+    let files = path.iter().map(Clone::clone);
     for entry in beancount_parser::read_files_iter::<Decimal>(files) {
         if let Entry::Directive(directive) = entry? {
             directives

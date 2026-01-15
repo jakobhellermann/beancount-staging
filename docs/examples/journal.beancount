@@ -1,0 +1,117 @@
+; Journal file - manually maintained accounting records
+; This contains ~20 transactions that match staging, plus 1 manual entry
+
+; Opening balances
+2024-01-01 open Assets:Checking
+2024-01-01 open Assets:Savings
+2024-01-01 open Equity:Opening-Balances
+2024-01-01 open Expenses:Groceries
+2024-01-01 open Expenses:Restaurant
+2024-01-01 open Expenses:Transport
+2024-01-01 open Expenses:Utilities
+2024-01-01 open Expenses:Entertainment
+2024-01-01 open Expenses:Healthcare
+2024-01-01 open Expenses:Clothing
+2024-01-01 open Income:Salary
+2024-01-01 open Liabilities:CreditCard
+
+; Transactions that match staging (already imported and categorized)
+
+2024-01-05 * "SuperMart" "Weekly groceries"
+    Assets:Checking                  -156.78 EUR
+    Expenses:Groceries                156.78 EUR
+
+2024-01-07 * "City Transit" "Monthly transit pass"
+    Assets:Checking                   -89.00 EUR
+    Expenses:Transport                 89.00 EUR
+
+2024-01-10 * "Electric Co" "January electricity bill"
+    Assets:Checking                  -125.43 EUR
+    Expenses:Utilities                125.43 EUR
+
+2024-01-12 * "Italian Bistro" "Dinner with friends"
+    Liabilities:CreditCard            -67.50 EUR
+    Expenses:Restaurant                67.50 EUR
+
+2024-01-15 * "ACME Corp" "January salary"
+    Assets:Checking                  3500.00 EUR
+    Income:Salary                   -3500.00 EUR
+
+2024-01-18 * "FreshMart" "Groceries and household items"
+    Assets:Checking                   -92.34 EUR
+    Expenses:Groceries                 92.34 EUR
+
+2024-01-20 * "Cinema Plus" "Movie tickets"
+    Liabilities:CreditCard            -28.00 EUR
+    Expenses:Entertainment             28.00 EUR
+
+2024-01-22 * "Gas Station" "Fuel"
+    Assets:Checking                   -65.00 EUR
+    Expenses:Transport                 65.00 EUR
+
+2024-01-25 * "Dr. Smith" "Medical consultation"
+    Assets:Checking                  -150.00 EUR
+    Expenses:Healthcare               150.00 EUR
+
+2024-01-27 * "Fashion Store" "Winter jacket"
+    Liabilities:CreditCard           -189.99 EUR
+    Expenses:Clothing                 189.99 EUR
+
+2024-01-29 * "SuperMart" "Weekly groceries"
+    Assets:Checking                  -143.21 EUR
+    Expenses:Groceries                143.21 EUR
+
+2024-02-01 * "Internet Provider" "February internet"
+    Assets:Checking                   -45.00 EUR
+    Expenses:Utilities                 45.00 EUR
+
+2024-02-03 * "Coffee Shop" "Coffee and pastries"
+    Liabilities:CreditCard            -12.50 EUR
+    Expenses:Restaurant                12.50 EUR
+
+2024-02-05 * "Pharmacy" "Prescription medication"
+    Assets:Checking                   -34.80 EUR
+    Expenses:Healthcare                34.80 EUR
+
+2024-02-08 * "FreshMart" "Groceries"
+    Assets:Checking                   -78.90 EUR
+    Expenses:Groceries                 78.90 EUR
+
+2024-02-10 * "Streaming Service" "Monthly subscription"
+    Liabilities:CreditCard            -14.99 EUR
+    Expenses:Entertainment             14.99 EUR
+
+2024-02-12 * "Gas Station" "Fuel"
+    Assets:Checking                   -70.00 EUR
+    Expenses:Transport                 70.00 EUR
+
+2024-02-15 * "ACME Corp" "February salary"
+    Assets:Checking                  3500.00 EUR
+    Income:Salary                   -3500.00 EUR
+
+2024-02-17 * "Thai Restaurant" "Lunch meeting"
+    Liabilities:CreditCard            -45.00 EUR
+    Expenses:Restaurant                45.00 EUR
+
+2024-02-20 * "SuperMart" "Weekly groceries"
+    Assets:Checking                  -167.45 EUR
+    Expenses:Groceries                167.45 EUR
+
+2024-02-22 * "Bookstore" "Technical books"
+    Liabilities:CreditCard            -56.80 EUR
+    Expenses:Entertainment             56.80 EUR
+
+; Manual entry - only in journal (not in staging)
+; This represents a cash transaction that wouldn't be in bank imports
+2024-02-23 * "Farmers Market" "Fresh produce - paid cash"
+    Assets:Checking                   -35.00 EUR
+        note: "Cash withdrawal not tracked in staging"
+    Expenses:Groceries                 35.00 EUR
+
+; Balance assertion (calculated from transactions above)
+; Note: This doesn't match staging because of the Farmers Market cash transaction
+2024-02-25 balance Assets:Checking   5747.09 EUR
+
+2024-02-28 * "Auto Service" "Car maintenance"
+    Assets:Checking                  -245.00 EUR
+    Assets:Foo

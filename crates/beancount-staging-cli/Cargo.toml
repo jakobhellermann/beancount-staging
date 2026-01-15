@@ -1,13 +1,12 @@
 [package]
-name = "beancount-staging"
+name = "beancount-staging-cli"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+anstyle = "1.0"
 anyhow.workspace = true
 beancount-parser.workspace = true
-rust_decimal = { version = "1.40.0", default-features = false }
-
-[dev-dependencies]
-insta.workspace = true
+beancount-staging = { path = "../beancount-staging" }
+clap = { version = "4.5", features = ["derive"] }

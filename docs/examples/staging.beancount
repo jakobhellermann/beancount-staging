@@ -1,0 +1,89 @@
+; Staging file - automatic bank import
+; It has incomplete transactions, no open statements.
+
+; Transactions matching journal (already reviewed and categorized there)
+
+2024-01-05 * "SuperMart" "Weekly groceries"
+    Assets:Checking         -156.78 EUR
+
+2024-01-07 * "City Transit" "Monthly transit pass"
+    Assets:Checking          -89.00 EUR
+
+2024-01-10 * "Electric Co" "January electricity bill"
+    Assets:Checking         -125.43 EUR
+
+2024-01-12 * "Italian Bistro" "Dinner with friends"
+    Liabilities:CreditCard   -67.50 EUR
+
+2024-01-15 * "ACME Corp" "January salary"
+    Assets:Checking         3500.00 EUR
+
+2024-01-18 * "FreshMart" "Groceries and household items"
+    Assets:Checking          -92.34 EUR
+
+2024-01-20 * "Cinema Plus" "Movie tickets"
+    Liabilities:CreditCard   -28.00 EUR
+
+2024-01-22 * "Gas Station" "Fuel"
+    Assets:Checking          -65.00 EUR
+
+2024-01-25 * "Dr. Smith" "Medical consultation"
+    Assets:Checking         -150.00 EUR
+
+2024-01-27 * "Fashion Store" "Winter jacket"
+    Liabilities:CreditCard  -189.99 EUR
+
+2024-01-29 * "SuperMart" "Weekly groceries"
+    Assets:Checking         -143.21 EUR
+
+2024-02-01 * "Internet Provider" "February internet"
+    Assets:Checking          -45.00 EUR
+
+2024-02-03 * "Coffee Shop" "Coffee and pastries"
+    Liabilities:CreditCard   -12.50 EUR
+
+2024-02-05 * "Pharmacy" "Prescription medication"
+    Assets:Checking          -34.80 EUR
+
+2024-02-08 * "FreshMart" "Groceries"
+    Assets:Checking          -78.90 EUR
+
+2024-02-10 * "Streaming Service" "Monthly subscription"
+    Liabilities:CreditCard   -14.99 EUR
+
+2024-02-12 * "Gas Station" "Fuel"
+    Assets:Checking          -70.00 EUR
+
+2024-02-15 * "ACME Corp" "February salary"
+    Assets:Checking         3500.00 EUR
+
+2024-02-17 * "Thai Restaurant" "Lunch meeting"
+    Liabilities:CreditCard   -45.00 EUR
+
+2024-02-20 * "SuperMart" "Weekly groceries"
+    Assets:Checking         -167.45 EUR
+
+2024-02-22 * "Bookstore" "Technical books"
+    Liabilities:CreditCard   -56.80 EUR
+
+; NEW transactions in staging (need to be reviewed and categorized)
+; These represent recent imports that haven't been processed yet
+
+2024-02-24 ! "Unknown Merchant" "POS TRANSACTION"
+    Assets:Checking          -23.45 EUR
+
+2024-02-25 ! "AMZN Marketplace" "Online purchase"
+    Liabilities:CreditCard   -87.99 EUR
+
+2024-02-26 ! "City Parking" "Parking fee"
+    Assets:Checking          -15.00 EUR
+
+2024-02-27 ! "Pizza Place" "Food delivery"
+    Liabilities:CreditCard   -32.50 EUR
+
+2024-02-28 ! "Auto Service" "Car maintenance"
+    Assets:Checking         -245.00 EUR
+
+; Balance from bank statement (if needed for validation)
+; Note: This will fail bean-check because staging transactions are incomplete
+; 2024-02-28 balance Assets:Checking  XXX.XX EUR
