@@ -28,6 +28,8 @@ class StagingApp {
   private accountInput: HTMLInputElement;
   private commitBtn: HTMLButtonElement;
   private messageEl: HTMLElement;
+  private prevBtn: HTMLButtonElement;
+  private nextBtn: HTMLButtonElement;
 
   constructor() {
     this.transactionEl = document.getElementById("transaction")!;
@@ -35,10 +37,12 @@ class StagingApp {
     this.accountInput = document.getElementById("expense-account") as HTMLInputElement;
     this.commitBtn = document.getElementById("commit") as HTMLButtonElement;
     this.messageEl = document.getElementById("message")!;
+    this.prevBtn = document.getElementById("prev") as HTMLButtonElement;
+    this.nextBtn = document.getElementById("next") as HTMLButtonElement;
 
     // Set up event listeners
-    document.getElementById("prev")!.onclick = () => this.prev();
-    document.getElementById("next")!.onclick = () => this.next();
+    this.prevBtn.onclick = () => this.prev();
+    this.nextBtn.onclick = () => this.next();
     this.commitBtn.onclick = () => this.commit();
 
     // Auto-save account on input change
@@ -79,6 +83,10 @@ class StagingApp {
         this.showSuccess("No transactions to review!");
         this.transactionEl.textContent = "All done!";
         this.counterEl.textContent = "0/0";
+        this.accountInput.disabled = true;
+        this.commitBtn.disabled = true;
+        this.prevBtn.disabled = true;
+        this.nextBtn.disabled = true;
         return;
       }
 
@@ -167,6 +175,8 @@ class StagingApp {
         this.counterEl.textContent = "0/0";
         this.accountInput.disabled = true;
         this.commitBtn.disabled = true;
+        this.prevBtn.disabled = true;
+        this.nextBtn.disabled = true;
         return;
       }
 
@@ -185,11 +195,17 @@ class StagingApp {
   }
 
   async next() {
+    if (this.totalCount === 0) {
+      return;
+    }
     this.currentIndex = (this.currentIndex + 1) % this.totalCount;
     await this.loadTransaction();
   }
 
   async prev() {
+    if (this.totalCount === 0) {
+      return;
+    }
     this.currentIndex = this.currentIndex === 0 ? this.totalCount - 1 : this.currentIndex - 1;
     await this.loadTransaction();
   }
