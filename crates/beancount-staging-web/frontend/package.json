@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "esbuild src/app.ts --bundle --outfile=static/app.js",
-    "watch": "esbuild src/app.ts --bundle --outfile=static/app.js --watch",
+    "build": "esbuild src/app.ts --bundle --outfile=static/app.js --sourcemap",
+    "watch": "esbuild src/app.ts --bundle --outfile=static/app.js --sourcemap --watch",
     "check": "tsgo"
   },
   "devDependencies": {
