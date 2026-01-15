@@ -2,9 +2,16 @@ use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
 };
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
+use tokio_stream::StreamExt;
+use tokio_stream::wrappers::BroadcastStream;
 
 use crate::state::AppState;
 
@@ -139,14 +146,16 @@ pub async fn commit_transaction(
     let directive = &inner.staging_items[index];
 
     // Use library function to commit transaction
-    beancount_staging::commit_transaction(directive, &expense_account, &inner.journal_paths[0])
-        .map_err(|e| {
+    let journal_path = &inner.reconcile_config.journal_paths[0];
+    beancount_staging::commit_transaction(directive, &expense_account, journal_path).map_err(
+        |e| {
             tracing::error!("Failed to commit transaction {}: {}", index, e);
             ErrorResponse {
                 error: format!("Failed to commit: {}", e),
             }
             .into_response()
-        })?;
+        },
+    )?;
 
     tracing::info!(
         "Committed transaction {} with expense account '{}'",
@@ -175,4 +184,13 @@ pub async fn commit_transaction(
         ok: true,
         remaining_count,
     }))
+}
+
+pub async fn file_changes_stream(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.file_change_tx.subscribe();
+    let stream = BroadcastStream::new(rx).map(|_| Ok(Event::default().data("reload")));
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }

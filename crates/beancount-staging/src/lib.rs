@@ -10,7 +10,7 @@ pub type Decimal = rust_decimal::Decimal;
 
 pub use anyhow::Result;
 
-use std::path::Path;
+use std::{io::BufWriter, path::Path};
 
 /// Read all directives from the given source.
 pub fn read_directives(file: impl AsRef<Path>) -> Result<Vec<Directive>> {
@@ -55,7 +55,7 @@ pub fn commit_transaction(
     }
 
     // Open journal file in append mode
-    let mut file = OpenOptions::new().append(true).open(journal_path)?;
+    let mut file = BufWriter::new(OpenOptions::new().append(true).open(journal_path)?);
 
     writeln!(file, "\n{}", directive)?;
 
