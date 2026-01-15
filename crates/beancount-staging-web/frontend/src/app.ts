@@ -135,7 +135,6 @@ class StagingApp {
         return;
       }
 
-      this.showSuccess("Transaction committed!");
       this.totalCount = data.remaining_count;
 
       // Adjust index if needed
