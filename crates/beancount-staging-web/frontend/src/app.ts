@@ -5,10 +5,12 @@ class StagingApp {
   private currentIndex = 0;
   private totalCount = 0;
   private currentAccount = "";
+  private availableAccounts: string[] = [];
 
   private transactionEl: HTMLElement;
   private counterEl: HTMLElement;
   private accountInput: HTMLInputElement;
+  private accountDatalist: HTMLDataListElement;
   private commitBtn: HTMLButtonElement;
   private messageEl: HTMLElement;
   private prevBtn: HTMLButtonElement;
@@ -18,6 +20,7 @@ class StagingApp {
     this.transactionEl = document.getElementById("transaction")!;
     this.counterEl = document.getElementById("counter")!;
     this.accountInput = document.getElementById("expense-account") as HTMLInputElement;
+    this.accountDatalist = document.getElementById("account-list") as HTMLDataListElement;
     this.commitBtn = document.getElementById("commit") as HTMLButtonElement;
     this.messageEl = document.getElementById("message")!;
     this.prevBtn = document.getElementById("prev") as HTMLButtonElement;
@@ -73,6 +76,9 @@ class StagingApp {
   async reloadData() {
     try {
       const data = await this.api.init();
+
+      this.availableAccounts = data.available_accounts;
+      this.populateAccountList();
 
       if (data.items.length === 0) {
         this.showSuccess("No transactions to review!");
@@ -200,6 +206,15 @@ class StagingApp {
   private clearMessage() {
     this.messageEl.className = "";
     this.messageEl.textContent = "";
+  }
+
+  private populateAccountList() {
+    this.accountDatalist.replaceChildren();
+    for (const account of this.availableAccounts) {
+      const option = document.createElement("option");
+      option.value = account;
+      this.accountDatalist.appendChild(option);
+    }
   }
 }
 

@@ -30,6 +30,7 @@ impl IntoResponse for ErrorResponse {
 pub struct InitResponse {
     pub items: Vec<SerializedDirective>,
     pub current_index: usize,
+    pub available_accounts: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -73,6 +74,7 @@ pub async fn init_handler(State(state): State<AppState>) -> Result<Json<InitResp
     Ok(Json(InitResponse {
         items,
         current_index: 0,
+        available_accounts: inner.available_accounts.iter().cloned().collect(),
     }))
 }
 

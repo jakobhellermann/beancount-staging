@@ -6,7 +6,7 @@ use crate::Result;
 use crate::utils::sort_merge_diff::{JoinResult, SortMergeDiff};
 use crate::{Decimal, Directive};
 use beancount_parser::{Date, Entry};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -56,6 +56,13 @@ impl ReconcileState {
         let staging = group_by_date(&self.staging);
         let results = reconcile(journal, staging);
         Ok(results)
+    }
+
+    pub fn accounts(&self) -> BTreeSet<String> {
+        self.journal
+            .iter()
+            .filter_map(|directive| Some(directive.content.as_open()?.account.to_string()))
+            .collect()
     }
 }
 
