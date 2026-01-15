@@ -4,7 +4,7 @@ mod show;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Args as ClapArgs, Parser, Subcommand};
+use clap::{Args as ClapArgs, CommandFactory as _, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "beancount-staging")]
@@ -44,6 +44,8 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    clap_complete::CompleteEnv::with_factory(Args::command).complete();
+
     let args = Args::parse();
 
     match args.command {
