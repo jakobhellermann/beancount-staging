@@ -31,22 +31,29 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
     let (file_change_tx, _rx) = tokio::sync::broadcast::channel(100);
     let state = AppState::new(journal.clone(), staging.clone(), file_change_tx.clone())?;
 
-    let state_for_watcher = state.clone();
-    let _watcher = FileWatcher::new(
-        journal.iter().chain(staging.iter()).map(AsRef::as_ref),
-        move || {
+    let _watcher = {
+        let state_ = state.inner.lock().unwrap();
+        let relevant_files = {
+            state_
+                .journal_sourceset
+                .iter()
+                .chain(state_.staging_sourceset.iter())
+                .map(AsRef::as_ref)
+        };
+        let state_for_watcher = state.clone();
+        FileWatcher::new(relevant_files, move || {
             if let Err(e) = state_for_watcher.reload() {
                 tracing::error!("Failed to reload state: {}", e);
             } else {
                 tracing::info!("State reloaded successfully");
             }
 
-            // Then notify clients via SSE
+            // notify clients via SSE
             if let Err(e) = state_for_watcher.file_change_tx.send(FileChangeEvent) {
                 tracing::error!("Failed to send SSE event: {}", e);
             }
-        },
-    )?;
+        })?
+    };
 
     // Build router with API routes first, then fallback to embedded static files
     let app = Router::new()

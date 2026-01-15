@@ -6,7 +6,7 @@ use crate::Result;
 use crate::utils::sort_merge_diff::{JoinResult, SortMergeDiff};
 use crate::{Decimal, Directive};
 use beancount_parser::{Date, Entry};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -14,6 +14,8 @@ pub enum ReconcileItem {
     OnlyInJournal(Directive),
     OnlyInStaging(Directive),
 }
+
+pub type SourceSet = HashSet<PathBuf>;
 
 pub struct ReconcileConfig {
     pub journal_paths: Vec<PathBuf>,
@@ -27,19 +29,22 @@ impl ReconcileConfig {
         }
     }
     /// Try to associate all journal and staging items, returning a list of differences.
-    pub fn reconcile(&self) -> Result<Vec<ReconcileItem>> {
-        let journal = read_directives_by_date(&self.journal_paths)?;
-        let staging = read_directives_by_date(&self.staging_paths)?;
+    pub fn reconcile(&self) -> Result<(Vec<ReconcileItem>, SourceSet, SourceSet)> {
+        let (journal, journal_sourceset) = read_directives_by_date(&self.journal_paths)?;
+        let (staging, staging_sourceset) = read_directives_by_date(&self.staging_paths)?;
 
         let results = reconcile(journal, staging);
-        Ok(results)
+        Ok((results, journal_sourceset, staging_sourceset))
     }
 }
 
-fn read_directives_by_date(path: &[PathBuf]) -> Result<BTreeMap<Date, Vec<Directive>>> {
+fn read_directives_by_date(
+    path: &[PathBuf],
+) -> Result<(BTreeMap<Date, Vec<Directive>>, HashSet<PathBuf>)> {
     let mut directives: BTreeMap<_, Vec<_>> = BTreeMap::new();
     let files = path.iter().map(Clone::clone);
-    for entry in beancount_parser::read_files_iter::<Decimal>(files) {
+    let mut iter = beancount_parser::read_files_iter::<Decimal>(files);
+    for entry in iter.by_ref() {
         if let Entry::Directive(directive) = entry? {
             directives
                 .entry(directive.date)
@@ -51,7 +56,7 @@ fn read_directives_by_date(path: &[PathBuf]) -> Result<BTreeMap<Date, Vec<Direct
         crate::sorting::sort_dedup_directives(bucket);
     }
 
-    Ok(directives)
+    Ok((directives, iter.loaded()))
 }
 
 fn reconcile(

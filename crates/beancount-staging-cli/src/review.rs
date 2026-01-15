@@ -6,7 +6,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::time::Duration;
 
 pub fn review_interactive(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<()> {
-    let results = ReconcileConfig::new(journal.clone(), staging).reconcile()?;
+    let (results, _, _) = ReconcileConfig::new(journal.clone(), staging).reconcile()?;
 
     // Filter only staging items
     let staging_items: Vec<_> = results
