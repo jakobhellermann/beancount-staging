@@ -1,6 +1,6 @@
 use axum::{
     http::{StatusCode, Uri, header},
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
 };
 use rust_embed::RustEmbed;
 
@@ -27,13 +27,6 @@ pub async fn static_handler(uri: Uri) -> impl IntoResponse {
                 .body(content.data.into())
                 .unwrap()
         }
-        None => {
-            // For SPA, fallback to index.html for client-side routing
-            if let Some(index) = Assets::get("index.html") {
-                Html(index.data).into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
-        }
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
