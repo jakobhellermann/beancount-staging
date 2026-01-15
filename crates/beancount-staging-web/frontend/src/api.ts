@@ -11,6 +11,7 @@ interface TransactionResponse {
 interface InitResponse {
   items: Transaction[];
   current_index: number;
+  available_accounts: string[];
 }
 
 interface CommitResponse {
