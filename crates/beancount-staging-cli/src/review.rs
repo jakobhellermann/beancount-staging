@@ -1,17 +1,21 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem};
+use beancount_staging::{
+    Directive,
+    reconcile::{ReconcileConfig, ReconcileItem},
+};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::time::Duration;
 
 pub fn review_interactive(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<()> {
-    let (results, _, _) = ReconcileConfig::new(journal.clone(), staging).reconcile()?;
+    let state = ReconcileConfig::new(journal.clone(), staging).read()?;
+    let results = state.reconcile()?;
 
     // Filter only staging items
     let staging_items: Vec<_> = results
         .iter()
-        .filter_map(|item| match item {
+        .filter_map(|item| match *item {
             ReconcileItem::OnlyInStaging(directive) => Some(directive),
             _ => None,
         })
@@ -35,7 +39,7 @@ pub fn review_interactive(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Resul
 
 fn run_review_loop(
     terminal: &mut ratatui::DefaultTerminal,
-    mut staging_items: Vec<&beancount_parser::Directive<beancount_staging::Decimal>>,
+    mut staging_items: Vec<&Directive>,
     journal_path: &Path,
 ) -> Result<()> {
     let mut current_index = 0;

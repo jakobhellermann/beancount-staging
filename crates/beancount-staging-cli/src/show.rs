@@ -6,7 +6,8 @@ use beancount_parser::DirectiveContent;
 use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem};
 
 pub fn show_diff(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<()> {
-    let (results, _, _) = ReconcileConfig::new(journal, staging).reconcile()?;
+    let state = ReconcileConfig::new(journal, staging).read()?;
+    let results = state.reconcile()?;
 
     let journal_style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Yellow)));
     let staging_style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green)));

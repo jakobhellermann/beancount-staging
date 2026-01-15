@@ -35,9 +35,10 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
         let state_ = state.inner.lock().unwrap();
         let relevant_files = {
             state_
+                .reconcile_state
                 .journal_sourceset
                 .iter()
-                .chain(state_.staging_sourceset.iter())
+                .chain(state_.reconcile_state.staging_sourceset.iter())
                 .map(AsRef::as_ref)
         };
         let state_for_watcher = state.clone();

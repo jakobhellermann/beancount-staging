@@ -10,9 +10,9 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 #[derive(Debug)]
-pub enum ReconcileItem {
-    OnlyInJournal(Directive),
-    OnlyInStaging(Directive),
+pub enum ReconcileItem<'a> {
+    OnlyInJournal(&'a Directive),
+    OnlyInStaging(&'a Directive),
 }
 
 pub type SourceSet = HashSet<PathBuf>;
@@ -28,41 +28,67 @@ impl ReconcileConfig {
             staging_paths,
         }
     }
-    /// Try to associate all journal and staging items, returning a list of differences.
-    pub fn reconcile(&self) -> Result<(Vec<ReconcileItem>, SourceSet, SourceSet)> {
-        let (journal, journal_sourceset) = read_directives_by_date(&self.journal_paths)?;
-        let (staging, staging_sourceset) = read_directives_by_date(&self.staging_paths)?;
 
-        let results = reconcile(journal, staging);
-        Ok((results, journal_sourceset, staging_sourceset))
+    pub fn read(&self) -> Result<ReconcileState> {
+        let (journal, journal_sourceset) = read_directives(&self.journal_paths)?;
+        let (staging, staging_sourceset) = read_directives(&self.staging_paths)?;
+        Ok(ReconcileState {
+            journal_sourceset,
+            staging_sourceset,
+            journal,
+            staging,
+        })
     }
 }
 
-fn read_directives_by_date(
-    path: &[PathBuf],
-) -> Result<(BTreeMap<Date, Vec<Directive>>, HashSet<PathBuf>)> {
-    let mut directives: BTreeMap<_, Vec<_>> = BTreeMap::new();
+#[derive(Default)]
+pub struct ReconcileState {
+    pub journal_sourceset: SourceSet,
+    pub staging_sourceset: SourceSet,
+
+    pub journal: Vec<Directive>,
+    pub staging: Vec<Directive>,
+}
+impl ReconcileState {
+    /// Try to associate all journal and staging items, returning a list of differences.
+    pub fn reconcile(&self) -> Result<Vec<ReconcileItem<'_>>> {
+        let journal = group_by_date(&self.journal);
+        let staging = group_by_date(&self.staging);
+        let results = reconcile(journal, staging);
+        Ok(results)
+    }
+}
+
+fn read_directives(path: &[PathBuf]) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
+    let mut directives = Vec::new();
     let files = path.iter().map(Clone::clone);
     let mut iter = beancount_parser::read_files_iter::<Decimal>(files);
     for entry in iter.by_ref() {
         if let Entry::Directive(directive) = entry? {
-            directives
-                .entry(directive.date)
-                .or_default()
-                .push(directive);
+            directives.push(directive);
         }
     }
-    for bucket in directives.values_mut() {
-        crate::sorting::sort_dedup_directives(bucket);
-    }
+    crate::sorting::sort_dedup_directives(&mut directives);
 
     Ok((directives, iter.loaded()))
 }
 
-fn reconcile(
-    journal: BTreeMap<Date, Vec<Directive>>,
-    staging: BTreeMap<Date, Vec<Directive>>,
-) -> Vec<ReconcileItem> {
+fn group_by_date(all: &[Directive]) -> BTreeMap<Date, Vec<&Directive>> {
+    let mut directives: BTreeMap<_, Vec<_>> = BTreeMap::new();
+    for directive in all {
+        directives
+            .entry(directive.date)
+            .or_default()
+            .push(directive);
+    }
+
+    directives
+}
+
+fn reconcile<'a>(
+    journal: BTreeMap<Date, Vec<&'a Directive>>,
+    staging: BTreeMap<Date, Vec<&'a Directive>>,
+) -> Vec<ReconcileItem<'a>> {
     let mut results = Vec::new();
 
     for bucket in SortMergeDiff::new(
@@ -87,15 +113,15 @@ fn reconcile(
 }
 
 // PERF: O(journal*staging) per bucket
-fn reconcile_bucket(
-    results: &mut Vec<ReconcileItem>,
-    mut journal: Vec<Directive>,
-    mut staging: Vec<Directive>,
+fn reconcile_bucket<'a>(
+    results: &mut Vec<ReconcileItem<'a>>,
+    mut journal: Vec<&'a Directive>,
+    mut staging: Vec<&'a Directive>,
 ) {
     while let Some(staging_item) = staging.pop() {
-        let match_at = journal.iter().position(|journal_item| {
-            matching::journal_matches_staging(journal_item, &staging_item)
-        });
+        let match_at = journal
+            .iter()
+            .position(|journal_item| matching::journal_matches_staging(journal_item, staging_item));
         if let Some(match_at) = match_at {
             journal.remove(match_at);
         } else {
@@ -115,15 +141,21 @@ mod tests {
             .unwrap()
     }
 
-    fn build_date_map(source: &str) -> BTreeMap<Date, Vec<Directive>> {
-        let mut map: BTreeMap<Date, Vec<Directive>> = BTreeMap::new();
+    fn build_directives(source: &str) -> Vec<Directive> {
+        let mut all_directives = Vec::new();
         for entry in parse_entries(source) {
             if let Entry::Directive(directive) = entry {
-                map.entry(directive.date).or_default().push(directive);
+                all_directives.push(directive);
             }
         }
-        for bucket in map.values_mut() {
-            crate::sorting::sort_dedup_directives(bucket);
+        crate::sorting::sort_dedup_directives(&mut all_directives);
+        all_directives
+    }
+
+    fn build_date_map<'a>(directives: &'a [Directive]) -> BTreeMap<Date, Vec<&'a Directive>> {
+        let mut map: BTreeMap<Date, Vec<&'a Directive>> = BTreeMap::new();
+        for directive in directives {
+            map.entry(directive.date).or_default().push(directive);
         }
         map
     }
@@ -185,8 +217,10 @@ mod tests {
 2025-01-03 * "Payee3" "Transaction 3"
     Assets:Checking  -75.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (0, 0));
@@ -208,7 +242,8 @@ mod tests {
     Assets:Checking  -75.00 EUR
     Expenses:Shopping  75.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
+        let journal_directives = build_directives(journal);
+        let journal_map = build_date_map(&journal_directives);
         let staging_map = BTreeMap::new();
         let results = reconcile(journal_map, staging_map);
 
@@ -241,8 +276,9 @@ mod tests {
 2025-01-03 * "Payee3" "Transaction 3"
     Assets:Checking  -75.00 EUR
 "#;
+        let staging_directives = build_directives(staging);
         let journal_map = BTreeMap::new();
-        let staging_map = build_date_map(staging);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (0, 3));
@@ -277,8 +313,10 @@ mod tests {
 2025-01-03 * "Payee3" "Transaction C"
     Assets:Checking  -75.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (1, 1));
@@ -315,8 +353,10 @@ mod tests {
 2025-01-01 * "Payee2" "Transaction 2"
     Assets:Checking  -50.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (1, 0));
@@ -341,8 +381,10 @@ mod tests {
 2025-01-02 * "Payee2" "Transaction on Jan 2"
     Assets:Checking  -50.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (1, 1));
@@ -382,8 +424,10 @@ mod tests {
 2025-01-01 * "Payee3" "Transaction 3"
     Assets:Checking  -75.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (0, 0));
@@ -415,8 +459,10 @@ mod tests {
 2025-01-01 * "PayeeC" "Transaction C"
     Assets:Savings  -125.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (3, 3));
@@ -464,8 +510,10 @@ mod tests {
 2025-01-01 * "Payee3" "Transaction 3"
     Assets:Checking  -75.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (0, 2));
@@ -498,8 +546,10 @@ mod tests {
 2025-01-01 * "Payee1" "Transaction 1"
     Assets:Checking  -100.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (2, 0));
@@ -535,8 +585,10 @@ mod tests {
         let staging = r#"
 2025-01-01 balance Assets:Checking  1500.00 EUR
 "#;
-        let journal_map = build_date_map(journal);
-        let staging_map = build_date_map(staging);
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
         let results = reconcile(journal_map, staging_map);
 
         assert_eq!(count_results(&results), (1, 1));
