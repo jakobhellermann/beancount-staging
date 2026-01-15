@@ -1,0 +1,14 @@
+{
+  "name": "beancount-staging-web-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/app.ts --bundle --outfile=static/app.js",
+    "watch": "esbuild src/app.ts --bundle --outfile=static/app.js --watch",
+    "check": "tsgo"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260115.1",
+    "esbuild": "^0.24.2"
+  }
+}

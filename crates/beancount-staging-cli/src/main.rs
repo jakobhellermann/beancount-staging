@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use beancount_parser::DirectiveContent;
-use beancount_staging::Directive;
 use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem};
 use clap::{Args as ClapArgs, Parser, Subcommand};
 
@@ -91,41 +90,6 @@ fn show_diff(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<()> {
             );
         }
     }
-
-    Ok(())
-}
-
-fn commit_transaction(
-    directive: &Directive,
-    expense_account: &str,
-    journal_path: &PathBuf,
-) -> Result<()> {
-    use anyhow::Context;
-    use std::fs::OpenOptions;
-    use std::io::Write;
-
-    // Clone and modify the directive
-    let mut modified_directive = directive.clone();
-
-    // Modify the transaction: change flag to * and add balancing posting
-    if let beancount_parser::DirectiveContent::Transaction(ref mut txn) = modified_directive.content
-    {
-        // Change flag from ! to *
-        txn.flag = Some('*');
-
-        // Add balancing posting with expense account (no amount - beancount infers it)
-        let account: beancount_parser::Account = expense_account
-            .parse()
-            .with_context(|| format!("Failed to parse account name: '{}'", expense_account))?;
-        txn.postings.push(beancount_parser::Posting::new(account));
-    }
-
-    // Open journal file in append mode
-    let mut file = OpenOptions::new().append(true).open(journal_path)?;
-
-    // Format and write with tabs replaced by spaces
-    let content = format!("{}", modified_directive).replace('\t', "    ");
-    writeln!(file, "\n{}", content)?;
 
     Ok(())
 }
@@ -272,7 +236,11 @@ fn run_review_loop(
                         // Commit transaction if expense account is set
                         if let Some(expense_account) = &expense_accounts[current_index] {
                             let directive = staging_items[current_index];
-                            match commit_transaction(directive, expense_account, journal_path) {
+                            match beancount_staging::commit_transaction(
+                                directive,
+                                expense_account,
+                                journal_path,
+                            ) {
                                 Ok(()) => {
                                     // Remove from list
                                     staging_items.remove(current_index);
