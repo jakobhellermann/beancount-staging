@@ -1,0 +1,15 @@
+[package]
+name = "beancount-staging"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+beancount-parser = { path = "/home/jakob/dev/rust/contrib/beancount-parser" }
+# beancount-parser = { git = "https://github.com/jakobhellermann/beancount-parser", branch = "update-deps" }
+
+# bin dependencies
+anyhow = "1.0"
+rust_decimal = { version = "1.40.0", default-features = false }
+
+[dev-dependencies]
+insta = "1.46.0"
