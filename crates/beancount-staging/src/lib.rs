@@ -2,11 +2,11 @@ pub mod reconcile;
 mod sorting;
 mod utils;
 
-pub(crate) type Directive = beancount_parser::Directive<Decimal>;
-pub(crate) type Entry = beancount_parser::Entry<Decimal>;
-pub(crate) type DirectiveContent = beancount_parser::DirectiveContent<Decimal>;
-pub(crate) type Transaction = beancount_parser::Transaction<Decimal>;
-pub(crate) type Decimal = rust_decimal::Decimal;
+pub type Directive = beancount_parser::Directive<Decimal>;
+pub type Entry = beancount_parser::Entry<Decimal>;
+pub type DirectiveContent = beancount_parser::DirectiveContent<Decimal>;
+pub type Transaction = beancount_parser::Transaction<Decimal>;
+pub type Decimal = rust_decimal::Decimal;
 
 pub use anyhow::Result;
 

@@ -10,3 +10,5 @@ anyhow.workspace = true
 beancount-parser.workspace = true
 beancount-staging = { path = "../beancount-staging" }
 clap = { version = "4.5", features = ["derive"] }
+ratatui = "0.30"
+crossterm = "0.29"
