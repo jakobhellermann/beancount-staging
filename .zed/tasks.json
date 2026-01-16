@@ -1,0 +1,21 @@
+[
+  {
+    "label": "Frontend Dev",
+    "command": "just frontend dev",
+  },
+  {
+    "label": "beancount-staging (demo)",
+    "command": "just run",
+    "hide": "always",
+  },
+  {
+    "label": "beancount-staging (real)",
+    "command": "just real",
+    "hide": "always",
+  },
+  {
+    "label": "Restore docs",
+    "command": "jj restore docs",
+    "hide": "always",
+  },
+]

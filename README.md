@@ -32,7 +32,7 @@ nix profile add github:jakobhellermann/beancount-staging # install
 ## CLI References
 
 ```
-ools for reviewing and staging beancount transactions
+Tool for reviewing and staging beancount transactions
 
 Usage: beancount-staging --journal-file <JOURNAL_FILE> --staging-file <STAGING_FILE> [COMMAND]
 
