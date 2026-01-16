@@ -87,3 +87,7 @@
 ; Balance from bank statement (if needed for validation)
 ; Note: This will fail bean-check because staging transactions are incomplete
 ; 2024-02-28 balance Assets:Checking  XXX.XX EUR
+
+2026-01-12 * "REWE" "Card Payment
+36060295/0073920019/1/1227 REF 630083/260045"
+    Assets:Checking           -85.5 EUR
