@@ -68,7 +68,7 @@ pub async fn init_handler(State(state): State<AppState>) -> Result<Json<InitResp
         })
         .collect();
 
-    tracing::info!("Loaded {} staging items", items.len());
+    tracing::info!("Sending {} staging items", items.len());
 
     Ok(Json(InitResponse {
         items,
@@ -143,6 +143,9 @@ pub async fn commit_transaction(
 pub async fn file_changes_stream(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let subscriber_count = state.file_change_tx.receiver_count();
+    tracing::info!("New SSE connection. Total subscribers: {subscriber_count}",);
+
     let rx = state.file_change_tx.subscribe();
     let stream = BroadcastStream::new(rx).map(|_| Ok(Event::default().data("reload")));
 
