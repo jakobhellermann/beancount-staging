@@ -2,7 +2,20 @@ import { ApiClient } from "./api";
 
 interface EditState {
   account: string;
+  payee?: string;
+  narration?: string;
 }
+
+const KEYBINDS = {
+  focus: {
+    payee: "p",
+    narration: "n",
+    account: "a",
+  },
+  prev: ["ArrowLeft", "h"],
+  next: ["ArrowRight", "l"],
+  commit: "Enter",
+};
 
 class StagingApp {
   private api = new ApiClient();
@@ -13,8 +26,6 @@ class StagingApp {
 
   private transactionEl: HTMLElement;
   private counterEl: HTMLElement;
-  private accountInput: HTMLInputElement;
-  private accountDatalist: HTMLDataListElement;
   private commitBtn: HTMLButtonElement;
   private messageEl: HTMLElement;
   private prevBtn: HTMLButtonElement;
@@ -23,8 +34,6 @@ class StagingApp {
   constructor() {
     this.transactionEl = document.getElementById("transaction")!;
     this.counterEl = document.getElementById("counter")!;
-    this.accountInput = document.getElementById("expense-account") as HTMLInputElement;
-    this.accountDatalist = document.getElementById("account-list") as HTMLDataListElement;
     this.commitBtn = document.getElementById("commit") as HTMLButtonElement;
     this.messageEl = document.getElementById("message")!;
     this.prevBtn = document.getElementById("prev") as HTMLButtonElement;
@@ -35,32 +44,29 @@ class StagingApp {
     this.nextBtn.onclick = () => this.next();
     this.commitBtn.onclick = () => this.commit();
 
-    // Update edit state on input change
-    this.accountInput.oninput = () => {
-      const value = this.accountInput.value.trim();
-      const currentDirective = this.directives[this.currentIndex];
-      if (currentDirective) {
-        if (value) {
-          this.editStates.set(currentDirective.id, { account: value });
-        } else {
-          this.editStates.delete(currentDirective.id);
-        }
-      }
-      this.commitBtn.disabled = value === "";
-    };
-
     // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
-      // Don't interfere when typing in input
-      if (document.activeElement === this.accountInput) {
+      // Don't interfere when typing in contenteditable
+      const activeEl = document.activeElement;
+      if (activeEl instanceof HTMLElement && activeEl.contentEditable === "plaintext-only") {
         return;
       }
 
-      if (e.key === "ArrowLeft" || e.key === "h") {
+      // Focus editable fields by their hint key
+      if (Object.values(KEYBINDS.focus).includes(e.key)) {
+        const editable = this.transactionEl.querySelector(`[data-key="${e.key}"]`);
+        if (editable instanceof HTMLElement) {
+          editable.focus();
+          e.preventDefault();
+          return;
+        }
+      }
+
+      if (KEYBINDS.prev.includes(e.key)) {
         this.prev();
-      } else if (e.key === "ArrowRight" || e.key === "l") {
+      } else if (KEYBINDS.next.includes(e.key)) {
         this.next();
-      } else if (e.key === "Enter") {
+      } else if (e.key === KEYBINDS.commit) {
         if (!this.commitBtn.disabled) {
           this.commit();
         }
@@ -91,13 +97,11 @@ class StagingApp {
 
       this.directives = data.items;
       this.availableAccounts = data.available_accounts;
-      this.populateAccountList();
 
       if (this.directives.length === 0) {
         this.showSuccess("No transactions to review!");
         this.transactionEl.textContent = "All done!";
         this.counterEl.textContent = "0/0";
-        this.accountInput.disabled = true;
         this.commitBtn.disabled = true;
         this.prevBtn.disabled = true;
         this.nextBtn.disabled = true;
@@ -124,16 +128,17 @@ class StagingApp {
 
       const data = await this.api.getTransaction(currentDirective.id);
 
-      // Reconstruct transaction text from structured data
-      this.transactionEl.textContent = this.formatTransaction(data.transaction.transaction);
+      // Initialize editState with default account if not present
+      if (!this.editStates.has(currentDirective.id)) {
+        this.editStates.set(currentDirective.id, {
+          account: "Expenses:FIXME",
+        });
+      }
+
+      // Reconstruct transaction as DOM with editable fields
+      this.renderTransaction(data.transaction.transaction);
 
       this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.directives.length}`;
-
-      // Load account from edit state
-      const editState = this.editStates.get(currentDirective.id);
-      const savedAccount = editState?.account || "";
-      this.accountInput.value = savedAccount;
-      this.commitBtn.disabled = savedAccount.trim() === "";
 
       this.clearMessage();
     } catch (err) {
@@ -141,26 +146,81 @@ class StagingApp {
     }
   }
 
-  private formatTransaction(txn: import("./types").Transaction): string {
-    const lines: string[] = [];
+  private renderTransaction(txn: import("./types").Transaction): void {
+    this.transactionEl.innerHTML = "";
+
+    const currentDirective = this.directives[this.currentIndex];
+    const editState = currentDirective ? this.editStates.get(currentDirective.id) : undefined;
+
+    // Helper to create contenteditable span
+    const createEditable = (
+      text: string,
+      key: string,
+      fieldName: "payee" | "narration" | "account",
+    ): HTMLSpanElement => {
+      const span = document.createElement("span");
+      span.contentEditable = "plaintext-only";
+      span.spellcheck = false;
+      span.textContent = text;
+      span.className = "editable";
+      span.setAttribute("data-key", key);
+      span.addEventListener("focus", () => this.selectAll(span));
+      span.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" || e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          span.blur();
+          window.getSelection()?.removeAllRanges();
+        }
+      });
+      span.addEventListener("input", () => {
+        const value = span.textContent?.trim() || "";
+        if (currentDirective) {
+          const state = this.editStates.get(currentDirective.id) || {
+            account: "",
+          };
+          this.editStates.set(currentDirective.id, {
+            ...state,
+            [fieldName]: value,
+          });
+          this.updateCommitButton();
+        }
+      });
+      return span;
+    };
 
     // First line: date flag payee narration
-    let firstLine = txn.date;
-    firstLine += " " + txn.flag;
-    if (txn.payee) {
-      firstLine += ' "' + txn.payee + '"';
+    this.transactionEl.appendChild(document.createTextNode(txn.date));
+    this.transactionEl.appendChild(document.createTextNode(" " + txn.flag));
+
+    if (txn.payee !== null) {
+      this.transactionEl.appendChild(document.createTextNode(' "'));
+      const payeeText = editState?.payee ?? txn.payee;
+      this.transactionEl.appendChild(createEditable(payeeText, KEYBINDS.focus.payee, "payee"));
+      this.transactionEl.appendChild(document.createTextNode('"'));
     }
-    if (txn.narration) {
-      firstLine += ' "' + txn.narration + '"';
+
+    if (txn.narration !== null) {
+      this.transactionEl.appendChild(document.createTextNode(' "'));
+      const narrationText = editState?.narration ?? txn.narration;
+      this.transactionEl.appendChild(
+        createEditable(narrationText, KEYBINDS.focus.narration, "narration"),
+      );
+      this.transactionEl.appendChild(document.createTextNode('"'));
     }
-    lines.push(firstLine);
+
+    this.transactionEl.appendChild(document.createTextNode("\n"));
 
     // Tags and links
     if (txn.tags.length > 0) {
-      lines.push("    " + txn.tags.map((t) => "#" + t).join(" "));
+      this.transactionEl.appendChild(
+        document.createTextNode("    " + txn.tags.map((t) => "#" + t).join(" ") + "\n"),
+      );
     }
     if (txn.links.length > 0) {
-      lines.push("    " + txn.links.map((l) => "^" + l).join(" "));
+      this.transactionEl.appendChild(
+        document.createTextNode("    " + txn.links.map((l) => "^" + l).join(" ") + "\n"),
+      );
     }
 
     // Postings
@@ -175,10 +235,17 @@ class StagingApp {
       if (posting.price) {
         postingLine += " @ " + posting.price;
       }
-      lines.push(postingLine);
+      this.transactionEl.appendChild(document.createTextNode(postingLine + "\n"));
     }
 
-    return lines.join("\n");
+    // Add editable expense account line
+    this.transactionEl.appendChild(document.createTextNode("    "));
+    const accountText = editState?.account || "";
+    this.transactionEl.appendChild(createEditable(accountText, KEYBINDS.focus.account, "account"));
+    this.transactionEl.appendChild(document.createTextNode("\n"));
+
+    // Update commit button state
+    this.updateCommitButton();
   }
 
   async commit() {
@@ -202,7 +269,6 @@ class StagingApp {
         this.showSuccess("All transactions committed!");
         this.transactionEl.textContent = "All done!";
         this.counterEl.textContent = "0/0";
-        this.accountInput.disabled = true;
         this.commitBtn.disabled = true;
         this.prevBtn.disabled = true;
         this.nextBtn.disabled = true;
@@ -242,6 +308,18 @@ class StagingApp {
     await this.loadTransaction();
   }
 
+  private updateCommitButton() {
+    const currentDirective = this.directives[this.currentIndex];
+    if (!currentDirective) {
+      this.commitBtn.disabled = true;
+      return;
+    }
+
+    const editState = this.editStates.get(currentDirective.id);
+    const hasAccount = editState?.account && editState.account.trim() !== "";
+    this.commitBtn.disabled = !hasAccount;
+  }
+
   private showError(message: string) {
     this.messageEl.className = "error";
     this.messageEl.textContent = message;
@@ -257,12 +335,13 @@ class StagingApp {
     this.messageEl.textContent = "";
   }
 
-  private populateAccountList() {
-    this.accountDatalist.replaceChildren();
-    for (const account of this.availableAccounts) {
-      const option = document.createElement("option");
-      option.value = account;
-      this.accountDatalist.appendChild(option);
+  private selectAll(element: HTMLElement) {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
     }
   }
 }

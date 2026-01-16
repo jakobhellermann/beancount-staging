@@ -51,34 +51,48 @@
         font-size: 14px;
       }
 
+      .editable {
+        outline: none;
+        border-radius: 2px;
+        padding: 1px 2px;
+        position: relative;
+      }
+
+      .editable::before {
+        content: attr(data-key);
+        position: absolute;
+        top: -1em;
+        left: -0.5em;
+        color: #007acc;
+        background: #2d2d2d00;
+        font-size: 11px;
+        font-weight: bold;
+        padding: 1px 3px;
+        border-radius: 2px;
+        pointer-events: none;
+      }
+
+      .editable:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .editable:hover::before {
+        display: none;
+      }
+
+      .editable:focus {
+        background: rgba(255, 255, 255, 0.1);
+        outline: 1px solid #007acc;
+      }
+
+      #transaction:focus-within .editable::before {
+        display: none;
+      }
+
       #controls {
         background: #2d2d2d;
         padding: 1rem;
         border-radius: 4px;
-      }
-
-      label {
-        display: block;
-        margin-bottom: 0.5rem;
-        color: #9cdcfe;
-        font-weight: bold;
-      }
-
-      input {
-        font-family: monospace;
-        width: 100%;
-        padding: 0.75rem;
-        background: #3c3c3c;
-        border: 1px solid #3e3e42;
-        border-radius: 4px;
-        color: #d4d4d4;
-        font-size: 14px;
-        margin-bottom: 1rem;
-      }
-
-      input:focus {
-        outline: none;
-        border-color: #007acc;
       }
 
       .button-group {
@@ -182,14 +196,6 @@
       <div id="message"></div>
       <div id="transaction">Loading transactions...</div>
       <div id="controls">
-        <label for="expense-account">Expense Account:</label>
-        <input
-          type="text"
-          id="expense-account"
-          placeholder="Expenses:Groceries"
-          list="account-list"
-        />
-        <datalist id="account-list"></datalist>
         <div class="button-group">
           <button id="prev">← Previous</button>
           <button id="next">Next →</button>
