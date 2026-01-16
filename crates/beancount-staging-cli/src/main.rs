@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod review;
 mod show;
 
@@ -7,39 +8,44 @@ use anyhow::Result;
 use clap::{Args as ClapArgs, CommandFactory as _, Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "beancount-staging")]
-#[command(about = "Tools for reviewing and staging beancount transactions")]
+#[command(
+    name = "beancount-staging",
+    about = "Tools for reviewing and staging beancount transactions"
+)]
+#[command(disable_help_subcommand = true)]
 struct Args {
     #[command(flatten)]
     files: FileArgs,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(ClapArgs)]
 struct FileArgs {
-    /// Journal file path
+    /// Journal file path. Staged transactions will be written into the first file.
     #[arg(short, long, required = true)]
-    journal: Vec<PathBuf>,
+    journal_file: Vec<PathBuf>,
 
     /// Staging file path
     #[arg(short, long, required = true)]
-    staging: Vec<PathBuf>,
+    staging_file: Vec<PathBuf>,
 }
+
+const DEFAULT_PORT: u16 = 8472;
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Show differences between journal and staging files
-    Show,
-    /// Interactively review and stage transactions (TUI)
-    Review,
-    /// Start web server for interactive review
-    Web {
+    /// Start web server for interactive review (default)
+    Serve {
         /// Port to listen on
         #[arg(short, long, default_value = "8472")]
         port: u16,
     },
+    /// Show differences between journal and staging files and exit
+    Diff,
+    // /// Interactively review and stage transactions in the terminal
+    // Cli,
 }
 
 #[tokio::main]
@@ -47,12 +53,15 @@ async fn main() -> Result<()> {
     clap_complete::CompleteEnv::with_factory(Args::command).complete();
 
     let args = Args::parse();
-
-    match args.command {
-        Commands::Show => show::show_diff(args.files.journal, args.files.staging),
-        Commands::Review => review::review_interactive(args.files.journal, args.files.staging),
-        Commands::Web { port } => {
-            beancount_staging_web::run(args.files.journal, args.files.staging, port).await
-        }
+    let command = args
+        .command
+        .unwrap_or(Commands::Serve { port: DEFAULT_PORT });
+    match command {
+        Commands::Diff => show::show_diff(args.files.journal_file, args.files.staging_file),
+        Commands::Serve { port } => {
+            beancount_staging_web::run(args.files.journal_file, args.files.staging_file, port).await
+        } /*Commands::Cli => {
+              review::review_interactive(args.files.journal_file, args.files.staging_file)
+          }*/
     }
 }

@@ -1,50 +1,55 @@
 # beancount-staging
 
-## Installation
-
-Via nix:
-
-```sh
-nix run github:jakobhellermann/beancount-staging # run without installing
-nix profile add github:jakobhellermann/beancount-staging
-```
-
-Tools for reviewing and staging beancount transactions.
-
 ## Usage
 
-Show differences between journal and staging:
+`beancount-staging` is a standalone tool for [beancount](https://github.com/beancount/beancount) which lets helps you to bridge automatic imports of transactions into your categorized journal.
 
-```bash
-beancount-staging -j journal.beancount -s staging.beancount show
+Given your existing journal and an automated import of transactions, beancount-staging starts a website in which you can interactively assign expense accounts, modify details, add tags and links.
+
+When you're done, it will append these transactions to your journal.
+
+```sh
+beancount-staging --journal-file journal.beancount --staging-file automated.beancount
 ```
 
-Interactive TUI review:
+![demo image](./docs/demo.png)
 
-```bash
-beancount-staging -j journal.beancount -s staging.beancount review
+## Installation
+
+```sh
+# via uv
+uvx beancount-staging # run without installing
+uv tool install beancount-staging # install
+
+# via cargo
+cargo install --git https://github.com/jakobhellermann/beancount-staging
+
+# via nix
+nix run github:jakobhellermann/beancount-staging # run without installing
+nix profile add github:jakobhellermann/beancount-staging # install
 ```
 
-Web UI:
+## CLI References
 
-```bash
-beancount-staging -j journal.beancount -s staging.beancount web
 ```
+ools for reviewing and staging beancount transactions
+
+Usage: beancount-staging --journal-file <JOURNAL_FILE> --staging-file <STAGING_FILE> [COMMAND]
+
+Commands:
+  serve  Start web server for interactive review (default)
+  diff   Show differences between journal and staging files and exit
+
+Options:
+  -j, --journal-file <JOURNAL_FILE>  Journal file path. Staged transactions will be written into the first file
+  -s, --staging-file <STAGING_FILE>  Staging file path
+  -h, --help                         Print help
+```
+
+## Use case scenarios
+
+TODO
 
 ## Development
 
-```bash
-just cli show         # Show diff
-just cli review       # Run TUI
-just web              # Run web server
-just check            # Format, lint, test
-```
-
-Frontend development:
-
-```bash
-cd crates/beancount-staging-web/frontend
-pnpm install
-pnpm run build
-pnpm run check        # Type check
-```
+TODO
