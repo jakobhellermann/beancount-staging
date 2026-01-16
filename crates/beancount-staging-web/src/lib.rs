@@ -80,7 +80,16 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
 
     // Start server
     let listen = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
-    let listener = tokio::net::TcpListener::bind(listen).await?;
+    let listener = tokio::net::TcpListener::bind(listen).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AddrInUse {
+            anyhow::anyhow!(
+                "Port {} is already in use. Please stop the existing server or choose a different port.",
+                port
+            )
+        } else {
+            anyhow::Error::from(e)
+        }
+    })?;
     tracing::info!("Server listening on http://{}", listen);
 
     axum::serve(listener, app).await?;
