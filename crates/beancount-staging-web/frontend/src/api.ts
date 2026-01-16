@@ -1,4 +1,4 @@
-import type { Directive } from "./types";
+import type { Directive } from "./model/beancount";
 
 export interface InitResponse {
   items: Directive[];
