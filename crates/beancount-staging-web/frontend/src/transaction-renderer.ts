@@ -92,7 +92,7 @@ export class TransactionRenderer {
 
     // Add editable expense account line
     this.container.appendChild(document.createTextNode("    "));
-    const accountText = editState?.account || "";
+    const accountText = editState?.account ?? "";
     this.container.appendChild(this.createAccountField(accountText, EDITABLE_SHORTCUTS.account));
     this.container.appendChild(document.createTextNode("\n"));
   }
