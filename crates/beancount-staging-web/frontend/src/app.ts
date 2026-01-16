@@ -1,11 +1,15 @@
 import { ApiClient } from "./api";
 
+interface EditState {
+  account: string;
+}
+
 class StagingApp {
   private api = new ApiClient();
   private currentIndex = 0;
   private totalCount = 0;
-  private currentAccount = "";
   private availableAccounts: string[] = [];
+  private editStates: Map<number, EditState> = new Map();
 
   private transactionEl: HTMLElement;
   private counterEl: HTMLElement;
@@ -31,10 +35,15 @@ class StagingApp {
     this.nextBtn.onclick = () => this.next();
     this.commitBtn.onclick = () => this.commit();
 
-    // Auto-save account on input change
+    // Update edit state on input change
     this.accountInput.oninput = () => {
-      this.currentAccount = this.accountInput.value;
-      this.commitBtn.disabled = this.accountInput.value.trim() === "";
+      const value = this.accountInput.value.trim();
+      if (value) {
+        this.editStates.set(this.currentIndex, { account: value });
+      } else {
+        this.editStates.delete(this.currentIndex);
+      }
+      this.commitBtn.disabled = value === "";
     };
 
     // Keyboard shortcuts
@@ -107,19 +116,16 @@ class StagingApp {
 
   async loadTransaction() {
     try {
-      // Save current account before loading new transaction
-      if (this.currentAccount) {
-        await this.saveAccount();
-      }
-
       const data = await this.api.getTransaction(this.currentIndex);
 
       this.transactionEl.textContent = data.transaction.content;
       this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.totalCount}`;
 
-      this.accountInput.value = data.expense_account || "";
-      this.currentAccount = this.accountInput.value;
-      this.commitBtn.disabled = this.accountInput.value.trim() === "";
+      // Load account from edit state
+      const editState = this.editStates.get(this.currentIndex);
+      const savedAccount = editState?.account || "";
+      this.accountInput.value = savedAccount;
+      this.commitBtn.disabled = savedAccount.trim() === "";
 
       this.clearMessage();
     } catch (err) {
@@ -127,31 +133,17 @@ class StagingApp {
     }
   }
 
-  async saveAccount() {
-    if (!this.currentAccount.trim()) {
-      return;
-    }
-
-    try {
-      await this.api.saveAccount(this.currentIndex, this.currentAccount);
-    } catch (err) {
-      this.showError(`Failed to save account: ${err}`);
-      throw err;
-    }
-  }
-
   async commit() {
-    if (!this.currentAccount.trim()) {
+    const editState = this.editStates.get(this.currentIndex);
+    const expenseAccount = editState?.account;
+    if (!expenseAccount || !expenseAccount.trim()) {
       this.showError("Please enter an expense account");
       return;
     }
 
     try {
-      // Save account first
-      await this.saveAccount();
-
-      // Commit transaction
-      const data = await this.api.commitTransaction(this.currentIndex);
+      // Commit transaction with expense account
+      const data = await this.api.commitTransaction(this.currentIndex, expenseAccount);
 
       if (data.remaining_count === 0) {
         this.showSuccess("All transactions committed!");
@@ -165,6 +157,20 @@ class StagingApp {
       }
 
       this.totalCount = data.remaining_count;
+
+      // Remove committed transaction's edit state
+      this.editStates.delete(this.currentIndex);
+
+      // Shift down all indices above the committed one
+      const newEditStates = new Map<number, EditState>();
+      for (const [idx, state] of this.editStates.entries()) {
+        if (idx > this.currentIndex) {
+          newEditStates.set(idx - 1, state);
+        } else {
+          newEditStates.set(idx, state);
+        }
+      }
+      this.editStates = newEditStates;
 
       // Adjust index if needed
       if (this.currentIndex >= this.totalCount) {
