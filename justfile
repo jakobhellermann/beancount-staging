@@ -19,7 +19,14 @@ frontend-watch:
     @cd crates/beancount-staging-web/frontend && pnpm --silent run watch
 
 check:
-    cargo fmt --check
-    cargo clippy
-    cargo nextest run --status-level fail
+    # format
     @cd crates/beancount-staging-web/frontend && pnpm --silent run check
+    @cd crates/beancount-staging-web/frontend && pnpm --silent run fmt:check
+    cargo fmt --check
+
+    # lints
+    @cd crates/beancount-staging-web/frontend && pnpm --silent run lint
+    cargo clippy
+
+    # tests
+    cargo nextest run --status-level fail
