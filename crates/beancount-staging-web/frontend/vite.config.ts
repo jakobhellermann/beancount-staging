@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 
 export default defineConfig({
@@ -18,6 +19,17 @@ export default defineConfig({
       input: {
         main: "./index.html",
       },
+    },
+  },
+  test: {
+    environment: "happy-dom",
+    globals: true,
+    include: ["src/**/*.{test,spec}.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/*.{test,spec}.ts"],
     },
   },
 });
