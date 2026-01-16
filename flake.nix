@@ -61,7 +61,7 @@
 
           npmDeps = pkgs.fetchNpmDeps {
             src = ./crates/beancount-staging-web/frontend;
-            hash = "sha256-lCtt4AAVYoTc4xadISuUy19WnTwAkf4+vkEN5ci+v9E=";
+            hash = "sha256-CPeM7pBXrD+fnlqz9Om6SBaqCbLHED+n+DmunBMcqJY=";
           };
 
           npmRoot = "crates/beancount-staging-web/frontend";

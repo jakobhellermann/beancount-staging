@@ -24,4 +24,5 @@ check:
     cargo clippy
 
     # tests
+    just frontend test
     cargo nextest run --status-level fail

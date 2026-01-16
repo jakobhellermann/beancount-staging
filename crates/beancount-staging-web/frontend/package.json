@@ -13,14 +13,22 @@
     "fmt": "oxfmt --ignore-path .oxfmtignore",
     "fmt:check": "oxfmt --check --ignore-path .oxfmtignore",
     "lint": "oxlint --type-aware",
-    "lint:fix": "oxlint --type-aware --fix"
+    "lint:fix": "oxlint --type-aware --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@typescript/native-preview": "^7.0.0-dev",
+    "@vitest/coverage-v8": "4.0.17",
+    "@vitest/ui": "^4.0.17",
+    "happy-dom": "^20.3.1",
     "oxfmt": "^0.24.0",
     "oxlint": "^1.39.0",
     "oxlint-tsgolint": "^0.11.1",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^4.0.17"
   }
 }

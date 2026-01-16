@@ -14,6 +14,10 @@
     "hide": "always",
   },
   {
+    "label": "Tests (frontend)",
+    "command": "just frontend test",
+  },
+  {
     "label": "Restore docs",
     "command": "jj restore docs",
     "hide": "always",
