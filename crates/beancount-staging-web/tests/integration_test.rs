@@ -81,20 +81,40 @@ async fn test_api_workflow() {
         .await
         .expect("transaction json parse failed");
 
-    // Should be the "New Transaction"
-    let content = txn["transaction"]["content"]
-        .as_str()
-        .expect("content should be string");
-    assert!(content.contains("2024-01-20"), "should contain date");
-    assert!(
-        content.contains("New Transaction"),
-        "should contain narration"
+    // Check structured transaction data (should be the "New Transaction")
+    let txn_data = &txn["transaction"]["transaction"];
+
+    // Check date
+    assert_eq!(txn_data["date"], "2024-01-20", "should have correct date");
+
+    // Check narration
+    assert_eq!(
+        txn_data["narration"], "New Transaction",
+        "should have correct narration"
     );
-    assert!(
-        content.contains("Assets:Checking"),
-        "should contain account"
+
+    // Check postings
+    let postings = txn_data["postings"]
+        .as_array()
+        .expect("postings should be array");
+    assert_eq!(postings.len(), 1, "should have 1 posting");
+
+    let posting = &postings[0];
+
+    // Check account
+    assert_eq!(
+        posting["account"], "Assets:Checking",
+        "should have correct account"
     );
-    assert!(content.contains("-25.00 USD"), "should contain amount");
+
+    // Check amount
+    let amount = &posting["amount"];
+    assert!(!amount.is_null(), "posting should have an amount");
+    assert_eq!(
+        amount["value"], "-25.00",
+        "should have correct amount value"
+    );
+    assert_eq!(amount["currency"], "USD", "should have correct currency");
 
     // Test 3: Commit transaction (should fail without expense_account)
     let commit_result = client

@@ -118,7 +118,9 @@ class StagingApp {
     try {
       const data = await this.api.getTransaction(this.currentIndex);
 
-      this.transactionEl.textContent = data.transaction.content;
+      // Reconstruct transaction text from structured data
+      this.transactionEl.textContent = this.formatTransaction(data.transaction.transaction);
+
       this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.totalCount}`;
 
       // Load account from edit state
@@ -131,6 +133,46 @@ class StagingApp {
     } catch (err) {
       this.showError(`Failed to load transaction: ${err}`);
     }
+  }
+
+  private formatTransaction(txn: import("./types").Transaction): string {
+    const lines: string[] = [];
+
+    // First line: date flag payee narration
+    let firstLine = txn.date;
+    firstLine += " " + txn.flag;
+    if (txn.payee) {
+      firstLine += ' "' + txn.payee + '"';
+    }
+    if (txn.narration) {
+      firstLine += ' "' + txn.narration + '"';
+    }
+    lines.push(firstLine);
+
+    // Tags and links
+    if (txn.tags.length > 0) {
+      lines.push("    " + txn.tags.map((t) => "#" + t).join(" "));
+    }
+    if (txn.links.length > 0) {
+      lines.push("    " + txn.links.map((l) => "^" + l).join(" "));
+    }
+
+    // Postings
+    for (const posting of txn.postings) {
+      let postingLine = "    " + posting.account;
+      if (posting.amount) {
+        postingLine += "  " + posting.amount.value + " " + posting.amount.currency;
+      }
+      if (posting.cost) {
+        postingLine += " " + posting.cost;
+      }
+      if (posting.price) {
+        postingLine += " @ " + posting.price;
+      }
+      lines.push(postingLine);
+    }
+
+    return lines.join("\n");
   }
 
   async commit() {
