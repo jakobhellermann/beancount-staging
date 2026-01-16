@@ -63,12 +63,12 @@ class StagingApp {
       }
 
       if (KEYBINDS.prev.includes(e.key)) {
-        this.prev();
+        void this.prev();
       } else if (KEYBINDS.next.includes(e.key)) {
-        this.next();
+        void this.next();
       } else if (e.key === KEYBINDS.commit) {
         if (!this.commitBtn.disabled) {
-          this.commit();
+          void this.commit();
         }
       }
     });
@@ -115,7 +115,7 @@ class StagingApp {
 
       await this.loadTransaction();
     } catch (err) {
-      this.showError(`Failed to reload data: ${err}`);
+      this.showError(`Failed to reload data: ${String(err)}`);
     }
   }
 
@@ -142,7 +142,7 @@ class StagingApp {
 
       this.clearMessage();
     } catch (err) {
-      this.showError(`Failed to load transaction: ${err}`);
+      this.showError(`Failed to load transaction: ${String(err)}`);
     }
   }
 
@@ -298,7 +298,7 @@ class StagingApp {
 
       await this.loadTransaction();
     } catch (err) {
-      this.showError(`Failed to commit transaction: ${err}`);
+      this.showError(`Failed to commit transaction: ${String(err)}`);
     }
   }
 
@@ -359,4 +359,4 @@ class StagingApp {
 
 // Initialize app when DOM is ready
 const app = new StagingApp();
-app.reloadData();
+void app.reloadData();
