@@ -2,7 +2,8 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc"],
   "rules": {
-    "no-unused-vars": ["warn", { "caughtErrorsIgnorePattern": "_" }]
+    "no-unused-vars": ["warn", { "caughtErrorsIgnorePattern": "_" }],
+    "typescript/prefer-nullish-coalescing": "warn"
   },
   "ignorePatterns": ["dist"]
 }

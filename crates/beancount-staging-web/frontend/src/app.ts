@@ -32,7 +32,7 @@ class StagingApp {
       (field, value) => {
         const currentDirective = this.directives[this.currentIndex];
         if (currentDirective) {
-          const state = this.editStates.get(currentDirective.id) || { account: "" };
+          const state = this.editStates.get(currentDirective.id) ?? { account: "" };
           this.editStates.set(currentDirective.id, { ...state, [field]: value });
           this.updateCommitButton();
         }
