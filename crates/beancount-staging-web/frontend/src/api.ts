@@ -1,19 +1,16 @@
-interface Transaction {
-  index: number;
-  content: string;
-}
+import type { Directive } from "./types";
 
-interface TransactionResponse {
-  transaction: Transaction;
-}
-
-interface InitResponse {
-  items: Transaction[];
+export interface InitResponse {
+  items: Directive[];
   current_index: number;
   available_accounts: string[];
 }
 
-interface CommitResponse {
+export interface TransactionResponse {
+  transaction: Directive;
+}
+
+export interface CommitResponse {
   ok: boolean;
   remaining_count: number;
 }
@@ -51,5 +48,3 @@ export class ApiClient {
     return await resp.json();
   }
 }
-
-export type { Transaction, TransactionResponse, InitResponse, CommitResponse };

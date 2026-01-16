@@ -14,6 +14,49 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::state::AppState;
+use beancount_staging::Directive;
+
+fn serialize_directive(index: usize, directive: &Directive) -> SerializedDirective {
+    use beancount_parser::DirectiveContent;
+
+    let transaction = match &directive.content {
+        DirectiveContent::Transaction(txn) => {
+            let postings = txn
+                .postings
+                .iter()
+                .map(|p| {
+                    let amount = p.amount.as_ref().map(|amt| SerializedAmount {
+                        value: amt.value.to_string(),
+                        currency: amt.currency.to_string(),
+                    });
+
+                    SerializedPosting {
+                        account: p.account.to_string(),
+                        amount,
+                        cost: p.cost.as_ref().map(|c| format!("{:?}", c)),
+                        price: p.price.as_ref().map(|p| format!("{:?}", p)),
+                    }
+                })
+                .collect();
+
+            SerializedTransaction {
+                date: directive.date.to_string(),
+                flag: txn
+                    .flag
+                    .map(|f| f.to_string())
+                    .unwrap_or_else(|| "*".to_string()),
+                payee: txn.payee.clone(),
+                narration: txn.narration.clone(),
+                tags: txn.tags.iter().map(|t| t.to_string()).collect(),
+                links: txn.links.iter().map(|l| l.to_string()).collect(),
+                postings,
+            }
+        }
+        _ => todo!("Only transactions staging are supported right now"),
+    };
+
+    SerializedDirective { index, transaction }
+}
 
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -36,7 +79,32 @@ pub struct InitResponse {
 #[derive(Serialize)]
 pub struct SerializedDirective {
     pub index: usize,
-    pub content: String,
+    pub transaction: SerializedTransaction,
+}
+
+#[derive(Serialize)]
+pub struct SerializedTransaction {
+    pub date: String,
+    pub flag: String,
+    pub payee: Option<String>,
+    pub narration: Option<String>,
+    pub tags: Vec<String>,
+    pub links: Vec<String>,
+    pub postings: Vec<SerializedPosting>,
+}
+
+#[derive(Serialize)]
+pub struct SerializedPosting {
+    pub account: String,
+    pub amount: Option<SerializedAmount>,
+    pub cost: Option<String>,
+    pub price: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SerializedAmount {
+    pub value: String,
+    pub currency: String,
 }
 
 #[derive(Serialize)]
@@ -62,10 +130,7 @@ pub async fn init_handler(State(state): State<AppState>) -> Result<Json<InitResp
         .staging_items
         .iter()
         .enumerate()
-        .map(|(index, directive)| SerializedDirective {
-            index,
-            content: format!("{}", directive).replace('\t', "    "),
-        })
+        .map(|(index, directive)| serialize_directive(index, directive))
         .collect();
 
     tracing::info!("Sending {} staging items", items.len());
@@ -90,10 +155,7 @@ pub async fn get_transaction(
     let directive = &inner.staging_items[index];
 
     Ok(Json(TransactionResponse {
-        transaction: SerializedDirective {
-            index,
-            content: format!("{}", directive).replace('\t', "    "),
-        },
+        transaction: serialize_directive(index, directive),
     }))
 }
 
