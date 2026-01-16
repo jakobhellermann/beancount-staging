@@ -2,20 +2,25 @@
   "name": "beancount-staging-web-frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "node build.mjs",
-    "watch": "node build.mjs --watch",
+    "build": "tsc && vite build",
+    "build:watch": "vite build --watch",
+    "dev": "vite",
+    "vite": "vite",
+    "preview": "vite preview",
     "check": "tsgo",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check",
+    "fmt": "oxfmt --ignore-path .oxfmtignore",
+    "fmt:check": "oxfmt --check --ignore-path .oxfmtignore",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix"
   },
   "devDependencies": {
     "@typescript/native-preview": "^7.0.0-dev",
-    "esbuild": "^0.27.2",
     "oxfmt": "^0.24.0",
     "oxlint": "^1.39.0",
-    "oxlint-tsgolint": "^0.11.1"
+    "oxlint-tsgolint": "^0.11.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
   }
 }

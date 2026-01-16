@@ -154,7 +154,7 @@ class StagingApp {
       // Initialize editState with default account if not present
       if (!this.editStates.has(currentDirective.id)) {
         this.editStates.set(currentDirective.id, {
-          account: "Expenses:FIXME",
+          account: "Expenses:",
         });
       }
 
