@@ -35,6 +35,12 @@ pub fn journal_matches_staging(journal: &Directive, staging: &Directive) -> bool
 
     match (&journal.content, &staging.content) {
         (DirectiveContent::Balance(j), DirectiveContent::Balance(s)) => j == s,
+        (DirectiveContent::Close(j), DirectiveContent::Close(s)) => j == s,
+        (DirectiveContent::Commodity(j), DirectiveContent::Commodity(s)) => j == s,
+        (DirectiveContent::Event(j), DirectiveContent::Event(s)) => j == s,
+        (DirectiveContent::Open(j), DirectiveContent::Open(s)) => j == s,
+        (DirectiveContent::Pad(j), DirectiveContent::Pad(s)) => j == s,
+        (DirectiveContent::Price(j), DirectiveContent::Price(s)) => j == s,
         (DirectiveContent::Transaction(j), DirectiveContent::Transaction(s)) => {
             journal_matches_staging_transaction(j, s)
         }
