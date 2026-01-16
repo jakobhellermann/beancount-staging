@@ -1,5 +1,5 @@
 export interface Directive {
-  index: number;
+  id: string;
   transaction: Transaction;
 }
 

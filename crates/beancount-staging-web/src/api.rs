@@ -13,11 +13,13 @@ use std::convert::Infallible;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::state::AppState;
+use crate::state::{AppState, generate_directive_id};
 use beancount_staging::Directive;
 
-fn serialize_directive(index: usize, directive: &Directive) -> SerializedDirective {
+fn serialize_directive(directive: &Directive) -> SerializedDirective {
     use beancount_parser::DirectiveContent;
+
+    let id = generate_directive_id(directive);
 
     let transaction = match &directive.content {
         DirectiveContent::Transaction(txn) => {
@@ -55,7 +57,7 @@ fn serialize_directive(index: usize, directive: &Directive) -> SerializedDirecti
         _ => todo!("Only transactions staging are supported right now"),
     };
 
-    SerializedDirective { index, transaction }
+    SerializedDirective { id, transaction }
 }
 
 #[derive(Serialize)]
@@ -78,7 +80,7 @@ pub struct InitResponse {
 
 #[derive(Serialize)]
 pub struct SerializedDirective {
-    pub index: usize,
+    pub id: String,
     pub transaction: SerializedTransaction,
 }
 
@@ -126,11 +128,11 @@ pub struct CommitResponse {
 pub async fn init_handler(State(state): State<AppState>) -> Result<Json<InitResponse>, StatusCode> {
     let inner = state.inner.lock().unwrap();
 
+    // BTreeMap already maintains sorted order by key (date-hash)
     let items: Vec<SerializedDirective> = inner
         .staging_items
-        .iter()
-        .enumerate()
-        .map(|(index, directive)| serialize_directive(index, directive))
+        .values()
+        .map(serialize_directive)
         .collect();
 
     tracing::info!("Sending {} staging items", items.len());
@@ -144,40 +146,36 @@ pub async fn init_handler(State(state): State<AppState>) -> Result<Json<InitResp
 
 pub async fn get_transaction(
     State(state): State<AppState>,
-    Path(index): Path<usize>,
+    Path(id): Path<String>,
 ) -> Result<Json<TransactionResponse>, StatusCode> {
     let inner = state.inner.lock().unwrap();
 
-    if index >= inner.staging_items.len() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let directive = &inner.staging_items[index];
+    let directive = inner.staging_items.get(&id).ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(TransactionResponse {
-        transaction: serialize_directive(index, directive),
+        transaction: serialize_directive(directive),
     }))
 }
 
 pub async fn commit_transaction(
     State(state): State<AppState>,
-    Path(index): Path<usize>,
+    Path(id): Path<String>,
     Json(payload): Json<CommitRequest>,
 ) -> Result<Json<CommitResponse>, Response> {
     let mut inner = state.inner.lock().unwrap();
 
-    if index >= inner.staging_items.len() {
-        return Err(StatusCode::NOT_FOUND.into_response());
-    }
+    let directive = inner
+        .staging_items
+        .get(&id)
+        .ok_or(StatusCode::NOT_FOUND.into_response())?;
 
     let expense_account = payload.expense_account;
-    let directive = &inner.staging_items[index];
 
     // Use library function to commit transaction
     let journal_path = &inner.reconcile_config.journal_paths[0];
     beancount_staging::commit_transaction(directive, &expense_account, journal_path).map_err(
         |e| {
-            tracing::error!("Failed to commit transaction {}: {}", index, e);
+            tracing::error!("Failed to commit transaction {}: {}", id, e);
             ErrorResponse {
                 error: format!("Failed to commit: {}", e),
             }
@@ -187,12 +185,12 @@ pub async fn commit_transaction(
 
     tracing::info!(
         "Committed transaction {} with expense account '{}'",
-        index,
+        id,
         expense_account
     );
 
     // Remove from staging items
-    inner.staging_items.remove(index);
+    inner.staging_items.remove(&id);
 
     let remaining_count = inner.staging_items.len();
 

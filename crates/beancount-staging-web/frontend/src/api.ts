@@ -24,16 +24,16 @@ export class ApiClient {
     return await resp.json();
   }
 
-  async getTransaction(index: number): Promise<TransactionResponse> {
-    const resp = await fetch(`/api/transaction/${index}`);
+  async getTransaction(id: string): Promise<TransactionResponse> {
+    const resp = await fetch(`/api/transaction/${id}`);
     if (!resp.ok) {
       throw new Error(`Failed to load transaction: ${resp.statusText}`);
     }
     return await resp.json();
   }
 
-  async commitTransaction(index: number, expenseAccount: string): Promise<CommitResponse> {
-    const resp = await fetch(`/api/transaction/${index}/commit`, {
+  async commitTransaction(id: string, expenseAccount: string): Promise<CommitResponse> {
+    const resp = await fetch(`/api/transaction/${id}/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expense_account: expenseAccount }),
