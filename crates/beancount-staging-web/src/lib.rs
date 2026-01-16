@@ -60,7 +60,6 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
     let app = Router::new()
         .route("/api/init", get(api::init_handler))
         .route("/api/transaction/{index}", get(api::get_transaction))
-        .route("/api/transaction/{index}/account", post(api::save_account))
         .route(
             "/api/transaction/{index}/commit",
             post(api::commit_transaction),

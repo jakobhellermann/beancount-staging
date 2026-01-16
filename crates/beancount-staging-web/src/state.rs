@@ -1,6 +1,6 @@
 use beancount_staging::Directive;
 use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, ReconcileState};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -21,9 +21,6 @@ pub struct AppStateInner {
     // derived data
     pub staging_items: Vec<Directive>,
     pub available_accounts: BTreeSet<String>,
-
-    // changes in progress
-    pub expense_accounts: HashMap<usize, String>,
 }
 
 impl AppStateInner {
@@ -35,7 +32,6 @@ impl AppStateInner {
             reconcile_state: ReconcileState::default(),
             staging_items: Vec::new(),
             available_accounts: BTreeSet::default(),
-            expense_accounts: HashMap::new(),
         }
     }
 
@@ -56,8 +52,6 @@ impl AppStateInner {
 
         // Extract all available accounts from journal
         self.available_accounts = self.reconcile_state.accounts();
-
-        // Keep existing expense_accounts for transactions that still exist
 
         Ok(())
     }

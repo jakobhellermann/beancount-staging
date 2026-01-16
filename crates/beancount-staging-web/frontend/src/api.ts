@@ -5,7 +5,6 @@ interface Transaction {
 
 interface TransactionResponse {
   transaction: Transaction;
-  expense_account: string | null;
 }
 
 interface InitResponse {
@@ -36,21 +35,11 @@ export class ApiClient {
     return await resp.json();
   }
 
-  async saveAccount(index: number, expenseAccount: string): Promise<void> {
-    const resp = await fetch(`/api/transaction/${index}/account`, {
+  async commitTransaction(index: number, expenseAccount: string): Promise<CommitResponse> {
+    const resp = await fetch(`/api/transaction/${index}/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expense_account: expenseAccount }),
-    });
-
-    if (!resp.ok) {
-      throw new Error(`Failed to save account: ${resp.statusText}`);
-    }
-  }
-
-  async commitTransaction(index: number): Promise<CommitResponse> {
-    const resp = await fetch(`/api/transaction/${index}/commit`, {
-      method: "POST",
     });
 
     if (!resp.ok) {

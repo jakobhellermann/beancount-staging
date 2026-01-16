@@ -42,11 +42,10 @@ pub struct SerializedDirective {
 #[derive(Serialize)]
 pub struct TransactionResponse {
     pub transaction: SerializedDirective,
-    pub expense_account: Option<String>,
 }
 
 #[derive(Deserialize)]
-pub struct SaveAccountRequest {
+pub struct CommitRequest {
     pub expense_account: String,
 }
 
@@ -89,44 +88,19 @@ pub async fn get_transaction(
     }
 
     let directive = &inner.staging_items[index];
-    let expense_account = inner.expense_accounts.get(&index).cloned();
 
     Ok(Json(TransactionResponse {
         transaction: SerializedDirective {
             index,
             content: format!("{}", directive).replace('\t', "    "),
         },
-        expense_account,
     }))
-}
-
-pub async fn save_account(
-    State(state): State<AppState>,
-    Path(index): Path<usize>,
-    Json(payload): Json<SaveAccountRequest>,
-) -> Result<Json<()>, StatusCode> {
-    let mut inner = state.inner.lock().unwrap();
-
-    if index >= inner.staging_items.len() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    tracing::info!(
-        "Saved expense account '{}' for transaction {}",
-        payload.expense_account,
-        index
-    );
-
-    inner
-        .expense_accounts
-        .insert(index, payload.expense_account);
-
-    Ok(Json(()))
 }
 
 pub async fn commit_transaction(
     State(state): State<AppState>,
     Path(index): Path<usize>,
+    Json(payload): Json<CommitRequest>,
 ) -> Result<Json<CommitResponse>, Response> {
     let mut inner = state.inner.lock().unwrap();
 
@@ -134,17 +108,7 @@ pub async fn commit_transaction(
         return Err(StatusCode::NOT_FOUND.into_response());
     }
 
-    let expense_account = inner
-        .expense_accounts
-        .get(&index)
-        .ok_or_else(|| {
-            ErrorResponse {
-                error: "No expense account set for this transaction".to_string(),
-            }
-            .into_response()
-        })?
-        .clone();
-
+    let expense_account = payload.expense_account;
     let directive = &inner.staging_items[index];
 
     // Use library function to commit transaction
@@ -165,20 +129,8 @@ pub async fn commit_transaction(
         expense_account
     );
 
-    // Remove from staging items and expense accounts
+    // Remove from staging items
     inner.staging_items.remove(index);
-    inner.expense_accounts.remove(&index);
-
-    // Adjust indices in expense_accounts HashMap
-    let mut new_accounts = std::collections::HashMap::new();
-    for (idx, account) in inner.expense_accounts.iter() {
-        if *idx > index {
-            new_accounts.insert(idx - 1, account.clone());
-        } else {
-            new_accounts.insert(*idx, account.clone());
-        }
-    }
-    inner.expense_accounts = new_accounts;
 
     let remaining_count = inner.staging_items.len();
 
