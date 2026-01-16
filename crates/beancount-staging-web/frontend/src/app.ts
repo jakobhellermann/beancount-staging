@@ -189,8 +189,16 @@ class StagingApp {
       return span;
     };
 
+    // Helper to create colored span
+    const createColored = (text: string, className: string): HTMLSpanElement => {
+      const span = document.createElement("span");
+      span.className = className;
+      span.textContent = text;
+      return span;
+    };
+
     // First line: date flag payee narration
-    this.transactionEl.appendChild(document.createTextNode(txn.date));
+    this.transactionEl.appendChild(createColored(txn.date, "date"));
     this.transactionEl.appendChild(document.createTextNode(" " + txn.flag));
 
     if (txn.payee !== null) {
@@ -225,17 +233,20 @@ class StagingApp {
 
     // Postings
     for (const posting of txn.postings) {
-      let postingLine = "    " + posting.account;
+      this.transactionEl.appendChild(document.createTextNode("    " + posting.account));
       if (posting.amount) {
-        postingLine += "  " + posting.amount.value + " " + posting.amount.currency;
+        this.transactionEl.appendChild(document.createTextNode("  "));
+        this.transactionEl.appendChild(createColored(posting.amount.value, "amount"));
+        this.transactionEl.appendChild(document.createTextNode(" "));
+        this.transactionEl.appendChild(createColored(posting.amount.currency, "currency"));
       }
       if (posting.cost) {
-        postingLine += " " + posting.cost;
+        this.transactionEl.appendChild(document.createTextNode(" " + posting.cost));
       }
       if (posting.price) {
-        postingLine += " @ " + posting.price;
+        this.transactionEl.appendChild(document.createTextNode(" @ " + posting.price));
       }
-      this.transactionEl.appendChild(document.createTextNode(postingLine + "\n"));
+      this.transactionEl.appendChild(document.createTextNode("\n"));
     }
 
     // Add editable expense account line
