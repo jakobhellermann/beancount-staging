@@ -6,10 +6,10 @@ interface EditState {
 
 class StagingApp {
   private api = new ApiClient();
+  private directives: import("./types").Directive[] = [];
   private currentIndex = 0;
-  private totalCount = 0;
   private availableAccounts: string[] = [];
-  private editStates: Map<number, EditState> = new Map();
+  private editStates: Map<string, EditState> = new Map();
 
   private transactionEl: HTMLElement;
   private counterEl: HTMLElement;
@@ -38,10 +38,13 @@ class StagingApp {
     // Update edit state on input change
     this.accountInput.oninput = () => {
       const value = this.accountInput.value.trim();
-      if (value) {
-        this.editStates.set(this.currentIndex, { account: value });
-      } else {
-        this.editStates.delete(this.currentIndex);
+      const currentDirective = this.directives[this.currentIndex];
+      if (currentDirective) {
+        if (value) {
+          this.editStates.set(currentDirective.id, { account: value });
+        } else {
+          this.editStates.delete(currentDirective.id);
+        }
       }
       this.commitBtn.disabled = value === "";
     };
@@ -86,10 +89,11 @@ class StagingApp {
     try {
       const data = await this.api.init();
 
+      this.directives = data.items;
       this.availableAccounts = data.available_accounts;
       this.populateAccountList();
 
-      if (data.items.length === 0) {
+      if (this.directives.length === 0) {
         this.showSuccess("No transactions to review!");
         this.transactionEl.textContent = "All done!";
         this.counterEl.textContent = "0/0";
@@ -97,15 +101,12 @@ class StagingApp {
         this.commitBtn.disabled = true;
         this.prevBtn.disabled = true;
         this.nextBtn.disabled = true;
-        this.totalCount = 0;
         return;
       }
 
-      this.totalCount = data.items.length;
-
       // Adjust current index if it's now out of bounds
-      if (this.currentIndex >= this.totalCount) {
-        this.currentIndex = this.totalCount - 1;
+      if (this.currentIndex >= this.directives.length) {
+        this.currentIndex = this.directives.length - 1;
       }
 
       await this.loadTransaction();
@@ -116,15 +117,20 @@ class StagingApp {
 
   async loadTransaction() {
     try {
-      const data = await this.api.getTransaction(this.currentIndex);
+      const currentDirective = this.directives[this.currentIndex];
+      if (!currentDirective) {
+        return;
+      }
+
+      const data = await this.api.getTransaction(currentDirective.id);
 
       // Reconstruct transaction text from structured data
       this.transactionEl.textContent = this.formatTransaction(data.transaction.transaction);
 
-      this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.totalCount}`;
+      this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.directives.length}`;
 
       // Load account from edit state
-      const editState = this.editStates.get(this.currentIndex);
+      const editState = this.editStates.get(currentDirective.id);
       const savedAccount = editState?.account || "";
       this.accountInput.value = savedAccount;
       this.commitBtn.disabled = savedAccount.trim() === "";
@@ -176,7 +182,12 @@ class StagingApp {
   }
 
   async commit() {
-    const editState = this.editStates.get(this.currentIndex);
+    const currentDirective = this.directives[this.currentIndex];
+    if (!currentDirective) {
+      return;
+    }
+
+    const editState = this.editStates.get(currentDirective.id);
     const expenseAccount = editState?.account;
     if (!expenseAccount || !expenseAccount.trim()) {
       this.showError("Please enter an expense account");
@@ -185,7 +196,7 @@ class StagingApp {
 
     try {
       // Commit transaction with expense account
-      const data = await this.api.commitTransaction(this.currentIndex, expenseAccount);
+      const data = await this.api.commitTransaction(currentDirective.id, expenseAccount);
 
       if (data.remaining_count === 0) {
         this.showSuccess("All transactions committed!");
@@ -195,28 +206,17 @@ class StagingApp {
         this.commitBtn.disabled = true;
         this.prevBtn.disabled = true;
         this.nextBtn.disabled = true;
+        this.directives = [];
         return;
       }
 
-      this.totalCount = data.remaining_count;
-
-      // Remove committed transaction's edit state
-      this.editStates.delete(this.currentIndex);
-
-      // Shift down all indices above the committed one
-      const newEditStates = new Map<number, EditState>();
-      for (const [idx, state] of this.editStates.entries()) {
-        if (idx > this.currentIndex) {
-          newEditStates.set(idx - 1, state);
-        } else {
-          newEditStates.set(idx, state);
-        }
-      }
-      this.editStates = newEditStates;
+      // Remove committed transaction's edit state and directive
+      this.editStates.delete(currentDirective.id);
+      this.directives.splice(this.currentIndex, 1);
 
       // Adjust index if needed
-      if (this.currentIndex >= this.totalCount) {
-        this.currentIndex = this.totalCount - 1;
+      if (this.currentIndex >= this.directives.length) {
+        this.currentIndex = this.directives.length - 1;
       }
 
       await this.loadTransaction();
@@ -226,18 +226,19 @@ class StagingApp {
   }
 
   async next() {
-    if (this.totalCount === 0) {
+    if (this.directives.length === 0) {
       return;
     }
-    this.currentIndex = (this.currentIndex + 1) % this.totalCount;
+    this.currentIndex = (this.currentIndex + 1) % this.directives.length;
     await this.loadTransaction();
   }
 
   async prev() {
-    if (this.totalCount === 0) {
+    if (this.directives.length === 0) {
       return;
     }
-    this.currentIndex = this.currentIndex === 0 ? this.totalCount - 1 : this.currentIndex - 1;
+    this.currentIndex =
+      this.currentIndex === 0 ? this.directives.length - 1 : this.currentIndex - 1;
     await this.loadTransaction();
   }
 

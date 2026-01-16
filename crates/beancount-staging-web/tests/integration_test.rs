@@ -71,9 +71,12 @@ async fn test_api_workflow() {
     assert!(accounts.contains(&serde_json::json!("Assets:Checking")));
     assert!(accounts.contains(&serde_json::json!("Expenses:Groceries")));
 
+    // Get the ID of the first transaction
+    let first_txn_id = items[0]["id"].as_str().expect("id should be a string");
+
     // Test 2: Get first transaction
     let txn: serde_json::Value = client
-        .get(format!("{}/api/transaction/0", base))
+        .get(format!("{}/api/transaction/{}", base, first_txn_id))
         .send()
         .await
         .expect("get transaction failed")
@@ -118,7 +121,7 @@ async fn test_api_workflow() {
 
     // Test 3: Commit transaction (should fail without expense_account)
     let commit_result = client
-        .post(format!("{}/api/transaction/0/commit", base))
+        .post(format!("{}/api/transaction/{}/commit", base, first_txn_id))
         .json(&serde_json::json!({}))
         .send()
         .await
@@ -132,7 +135,7 @@ async fn test_api_workflow() {
 
     // Test 4: Commit transaction successfully
     let commit_response: serde_json::Value = client
-        .post(format!("{}/api/transaction/0/commit", base))
+        .post(format!("{}/api/transaction/{}/commit", base, first_txn_id))
         .json(&serde_json::json!({"expense_account": "Expenses:Groceries"}))
         .send()
         .await
