@@ -50,8 +50,17 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
             }
 
             // notify clients via SSE
-            if let Err(e) = state_for_watcher.file_change_tx.send(FileChangeEvent) {
-                tracing::error!("Failed to send SSE event: {}", e);
+            let subscriber_count = state_for_watcher.file_change_tx.receiver_count();
+            match state_for_watcher.file_change_tx.send(FileChangeEvent) {
+                Ok(_) => {
+                    tracing::info!(
+                        "Sent file change event to {} SSE clients",
+                        subscriber_count - 1
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to send SSE event: {}", e);
+                }
             }
         })?
     };
