@@ -1,0 +1,221 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: monospace;
+  padding: 1rem;
+  background: #262626;
+  color: #d4d4d4;
+  line-height: 1.6;
+}
+
+#app {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+#header {
+  padding: 0.5rem;
+  background: #2d2d2d;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#counter {
+  font-weight: bold;
+  color: #4ec9b0;
+}
+
+#transaction {
+  white-space: pre-wrap;
+  padding: 1.5rem;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  min-height: 150px;
+  font-size: 14px;
+}
+
+.editable {
+  outline: none;
+  border-radius: 2px;
+  padding: 1px 2px;
+  position: relative;
+}
+
+.editable::before {
+  content: attr(data-key);
+  position: absolute;
+  top: -1em;
+  left: -0.5em;
+  color: #007acc;
+  background: #2d2d2d00;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 1px 3px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.editable:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.editable:hover::before {
+  display: none;
+}
+
+.editable:focus {
+  background: rgba(255, 255, 255, 0.1);
+  outline: 1px solid #007acc;
+}
+
+#transaction:focus-within .editable::before {
+  display: none;
+}
+
+.date {
+  color: #4ec9b0;
+}
+
+.amount {
+  color: #b5cea8;
+}
+
+.currency {
+  color: #ce9178;
+}
+
+#controls {
+  background: #2d2d2d;
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.button-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: bold;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#prev,
+#next {
+  background: #0e639c;
+  color: #fff;
+}
+
+#prev:hover,
+#next:hover {
+  background: #1177bb;
+}
+
+#prev:focus,
+#next:focus {
+  background: #1177bb;
+}
+
+#prev:disabled,
+#next:disabled {
+  background: #3e3e42;
+  color: #858585;
+  cursor: not-allowed;
+}
+
+#commit {
+  background: #16825d;
+  color: #fff;
+  flex: 1;
+}
+
+#commit:hover {
+  background: #1a9c6f;
+}
+
+#commit:focus {
+  background: #1a9c6f;
+}
+
+#commit:disabled {
+  background: #3e3e42;
+  color: #858585;
+  cursor: not-allowed;
+}
+
+.error {
+  background: #5a1d1d;
+  color: #f48771;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #be1100;
+}
+
+.success {
+  background: #1e3a28;
+  color: #4ec9b0;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #16825d;
+}
+
+.autocomplete-dropdown {
+  position: fixed;
+  background: #2d2d30;
+  border: 1px solid #007acc;
+  border-radius: 3px;
+  box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.4);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.autocomplete-item {
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autocomplete-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.autocomplete-item.selected {
+  background: #094771;
+  color: #ffffff;
+}
+
+@media (max-width: 600px) {
+  body {
+    padding: 0.5rem;
+  }
+
+  .button-group {
+    flex-direction: column;
+  }
+
+  button {
+    width: 100%;
+  }
+}
