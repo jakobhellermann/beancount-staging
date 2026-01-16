@@ -126,22 +126,25 @@ export class Autocomplete {
     if (this.items[indexToSelect]) {
       this.selectItem(this.items[indexToSelect]);
     } else {
+      const inputEl = this.currentInput;
       this.hide();
-      this.currentInput?.blur();
+      inputEl?.blur();
     }
   }
 
   private selectItem(item: string) {
     if (!this.currentInput) return;
 
-    this.currentInput.textContent = item;
+    const inputEl = this.currentInput;
+
+    inputEl.textContent = item;
     // Trigger input event to update state
-    this.currentInput.dispatchEvent(new Event("input"));
+    inputEl.dispatchEvent(new Event("input"));
 
     // Clear selection before hiding and blurring
     window.getSelection()?.removeAllRanges();
     this.hide();
-    this.currentInput.blur();
+    inputEl.blur();
 
     // Notify parent
     this.onSelect(item);
