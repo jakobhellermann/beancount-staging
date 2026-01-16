@@ -1,5 +1,14 @@
 # beancount-staging
 
+## Installation
+
+Via nix:
+
+```sh
+nix run github:jakobhellermann/beancount-staging # run without installing
+nix profile add github:jakobhellermann/beancount-staging
+```
+
 Tools for reviewing and staging beancount transactions.
 
 ## Usage
