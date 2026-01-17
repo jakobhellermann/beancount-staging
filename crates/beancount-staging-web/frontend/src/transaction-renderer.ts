@@ -153,15 +153,15 @@ export class TransactionRenderer {
 
       // Handle autocomplete navigation
       if (this.autocomplete.isVisible()) {
-        if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
+        if (e.key === "ArrowDown") {
           e.preventDefault();
           this.autocomplete.updateSelection("down");
           return;
-        } else if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
+        } else if (e.key === "ArrowUp") {
           e.preventDefault();
           this.autocomplete.updateSelection("up");
           return;
-        } else if (e.key === "Enter") {
+        } else if (e.key === "Enter" || e.key == "Tab") {
           e.preventDefault();
           this.autocomplete.selectCurrent();
           window.getSelection()?.removeAllRanges();
