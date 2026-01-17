@@ -172,6 +172,7 @@ dependencies = [
  "beancount-parser",
  "insta",
  "rust_decimal",
+ "tracing",
 ]
 
 [[package]]

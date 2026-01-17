@@ -5,7 +5,7 @@ mod matching;
 use crate::Result;
 use crate::utils::sort_merge_diff::{JoinResult, SortMergeDiff};
 use crate::{Decimal, Directive};
-use beancount_parser::{Date, Entry};
+use beancount_parser::{Date, DirectiveContent, Entry};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
@@ -126,6 +126,21 @@ fn reconcile_bucket<'a>(
     mut staging: Vec<&'a Directive>,
 ) {
     while let Some(staging_item) = staging.pop() {
+        if let DirectiveContent::Transaction(staging_item) = &staging_item.content {
+            // not supported yet
+            match staging_item.postings.len() {
+                0 => {
+                    tracing::warn!("Staging transaction contains zero postings");
+                    continue;
+                }
+                1 => {}
+                _ => {
+                    tracing::warn!("Staging transaction contains more than one posting");
+                    continue;
+                }
+            }
+        }
+
         let match_at = journal
             .iter()
             .position(|journal_item| matching::journal_matches_staging(journal_item, staging_item));
