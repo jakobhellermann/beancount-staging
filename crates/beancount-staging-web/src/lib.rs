@@ -22,7 +22,7 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
     let _ = tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "beancount_staging_web=info".into()),
+                .unwrap_or_else(|_| "beancount_staging=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .try_init();

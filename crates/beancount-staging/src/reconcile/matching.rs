@@ -6,7 +6,8 @@ fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transact
     // links can be anything
 
     let postings_match = match (journal.postings.as_slice(), staging.postings.as_slice()) {
-        ([j0, ..], [s]) => {
+        (j, [s]) => {
+            let [j0, ..] = j else { return false };
             // flag can be anything
             // todo: metadata
             s.account == j0.account
@@ -14,12 +15,8 @@ fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transact
                 && s.cost == j0.cost
                 && s.price == j0.price
         }
-        _ => todo!(
-            "j {} postings, s {} postings\n{}",
-            journal.postings.len(),
-            staging.postings.len(),
-            journal
-        ),
+        (_, &[]) => unreachable!(),
+        (_, &[..]) => unreachable!(),
     };
     if !postings_match {
         return false;
