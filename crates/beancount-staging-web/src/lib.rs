@@ -32,7 +32,7 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
     let state = AppState::new(journal.clone(), staging.clone(), file_change_tx.clone())?;
 
     let _watcher = {
-        let state_ = state.inner.lock().unwrap();
+        let state_ = state.lock().unwrap();
         let relevant_files = {
             state_
                 .reconcile_state

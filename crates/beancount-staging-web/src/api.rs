@@ -21,7 +21,7 @@ fn serialize_directive(directive: &Directive) -> SerializedDirective {
 
     let id = generate_directive_id(directive);
 
-    let transaction = match &directive.content {
+    let content = match &directive.content {
         DirectiveContent::Transaction(txn) => {
             let postings = txn
                 .postings
@@ -41,7 +41,7 @@ fn serialize_directive(directive: &Directive) -> SerializedDirective {
                 })
                 .collect();
 
-            SerializedTransaction {
+            SerializedDirectiveContent::Transaction(SerializedTransaction {
                 date: directive.date.to_string(),
                 flag: txn
                     .flag
@@ -52,12 +52,24 @@ fn serialize_directive(directive: &Directive) -> SerializedDirective {
                 tags: txn.tags.iter().map(|t| t.to_string()).collect(),
                 links: txn.links.iter().map(|l| l.to_string()).collect(),
                 postings,
-            }
+            })
         }
-        _ => todo!("Only transactions staging are supported right now"),
+        DirectiveContent::Balance(bal) => SerializedDirectiveContent::Balance(SerializedBalance {
+            date: directive.date.to_string(),
+            account: bal.account.to_string(),
+            amount: SerializedAmount {
+                value: bal.amount.value.to_string(),
+                currency: bal.amount.currency.to_string(),
+            },
+            tolerance: bal.tolerance.as_ref().map(|t| t.to_string()),
+        }),
+        other => todo!(
+            "Directive type not yet supported for serialization: {:?}",
+            other
+        ),
     };
 
-    SerializedDirective { id, transaction }
+    SerializedDirective { id, content }
 }
 
 #[derive(Serialize)]
@@ -81,7 +93,15 @@ pub struct InitResponse {
 #[derive(Serialize)]
 pub struct SerializedDirective {
     pub id: String,
-    pub transaction: SerializedTransaction,
+    #[serde(flatten)]
+    pub content: SerializedDirectiveContent,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SerializedDirectiveContent {
+    Transaction(SerializedTransaction),
+    Balance(SerializedBalance),
 }
 
 #[derive(Serialize)]
@@ -93,6 +113,14 @@ pub struct SerializedTransaction {
     pub tags: Vec<String>,
     pub links: Vec<String>,
     pub postings: Vec<SerializedPosting>,
+}
+
+#[derive(Serialize)]
+pub struct SerializedBalance {
+    pub date: String,
+    pub account: String,
+    pub amount: SerializedAmount,
+    pub tolerance: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -148,7 +176,7 @@ pub async fn get_transaction(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<TransactionResponse>, StatusCode> {
-    let inner = state.inner.lock().unwrap();
+    let inner = state.lock().unwrap();
 
     let directive = inner.staging_items.get(&id).ok_or(StatusCode::NOT_FOUND)?;
 
@@ -162,7 +190,7 @@ pub async fn commit_transaction(
     Path(id): Path<String>,
     Json(payload): Json<CommitRequest>,
 ) -> Result<Json<CommitResponse>, Response> {
-    let mut inner = state.inner.lock().unwrap();
+    let mut inner = state.lock().unwrap();
 
     let directive = inner
         .staging_items

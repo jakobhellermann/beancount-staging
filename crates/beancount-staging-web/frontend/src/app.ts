@@ -1,5 +1,5 @@
 import { ApiClient } from "./api";
-import { TransactionRenderer, type EditState } from "./transaction-renderer";
+import { DirectiveRenderer, type EditState } from "./directive-renderer";
 import { filterAccounts } from "./account-filter";
 import type { Directive } from "./model/beancount";
 
@@ -16,7 +16,7 @@ class StagingApp {
   private prevBtn: HTMLButtonElement;
   private nextBtn: HTMLButtonElement;
 
-  private renderer: TransactionRenderer;
+  private renderer: DirectiveRenderer;
 
   constructor() {
     this.transactionEl = document.getElementById("transaction")!;
@@ -27,7 +27,7 @@ class StagingApp {
     this.nextBtn = document.getElementById("next") as HTMLButtonElement;
 
     // Initialize renderer
-    this.renderer = new TransactionRenderer(
+    this.renderer = new DirectiveRenderer(
       this.transactionEl,
       (field, value) => {
         const currentDirective = this.directives[this.currentIndex];
@@ -131,10 +131,14 @@ class StagingApp {
 
       const editState = this.editStates.get(currentDirective.id);
 
-      // Render transaction
-      this.renderer.render(data.transaction.transaction, editState);
-
-      this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.directives.length}`;
+      // Render directive based on type
+      if (data.transaction.type === "transaction") {
+        this.renderer.render(data.transaction, editState);
+        this.counterEl.textContent = `Transaction ${this.currentIndex + 1}/${this.directives.length}`;
+      } else if (data.transaction.type === "balance") {
+        this.renderer.renderBalance(data.transaction);
+        this.counterEl.textContent = `Balance ${this.currentIndex + 1}/${this.directives.length}`;
+      }
 
       this.clearMessage();
       this.updateCommitButton();
