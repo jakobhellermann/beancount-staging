@@ -50,6 +50,10 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "beancount_staging=info".into());
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+
     clap_complete::CompleteEnv::with_factory(Args::command).complete();
 
     let args = Args::parse();
