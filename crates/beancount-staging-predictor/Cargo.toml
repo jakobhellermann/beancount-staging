@@ -1,0 +1,30 @@
+[package]
+name = "beancount-staging-predictor"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "beancount-predictor-eval"
+path = "src/bin/evaluate.rs"
+
+[[bin]]
+name = "plot-prediction"
+path = "src/bin/plot_prediction.rs"
+
+[[bin]]
+name = "inspect-preprocessing"
+path = "src/bin/inspect_preprocessing.rs"
+
+[dependencies]
+anyhow.workspace = true
+beancount-parser.workspace = true
+beancount-staging = { path = "../beancount-staging" }
+clap = { version = "4.5", features = ["derive"] }
+smartcore = "0.4"
+ndarray = "0.16"
+regex = "1.11"
+rand = "0.8"
+
+[dev-dependencies]
+insta.workspace = true
