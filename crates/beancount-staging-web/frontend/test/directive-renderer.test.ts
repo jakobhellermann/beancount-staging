@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
-import { TransactionRenderer } from "../src/transaction-renderer";
+import { DirectiveRenderer } from "../src/directive-renderer";
 import type { Transaction } from "../src/model/beancount";
 
-describe("TransactionRenderer", () => {
+describe("DirectiveRenderer", () => {
   let container: HTMLElement;
   let onInputMock: Mock<(field: "payee" | "narration" | "account", value: string) => void>;
   let filterMock: Mock<(query: string, items: string[]) => string[]>;
-  let renderer: TransactionRenderer;
+  let renderer: DirectiveRenderer;
 
   beforeEach(() => {
     document.body.innerHTML = '<div id="test-container"></div>';
@@ -14,7 +14,7 @@ describe("TransactionRenderer", () => {
     onInputMock = vi.fn();
     filterMock = vi.fn((query: string, items: string[]) => items);
 
-    renderer = new TransactionRenderer(
+    renderer = new DirectiveRenderer(
       container,
       onInputMock,
       ["Expenses:Food", "Expenses:Travel"],

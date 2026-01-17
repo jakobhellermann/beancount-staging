@@ -1,4 +1,4 @@
-import type { Transaction } from "./model/beancount";
+import type { Transaction, Balance } from "./model/beancount";
 import { Autocomplete, type FilterFunction } from "./autocomplete";
 
 export interface EditState {
@@ -13,7 +13,7 @@ const EDITABLE_SHORTCUTS = {
   account: "a",
 };
 
-export class TransactionRenderer {
+export class DirectiveRenderer {
   private autocomplete: Autocomplete;
 
   constructor(
@@ -204,6 +204,26 @@ export class TransactionRenderer {
       selection.removeAllRanges();
       selection.addRange(range);
     }
+  }
+
+  renderBalance(bal: Balance): void {
+    this.container.innerHTML = "";
+
+    // Format: date balance account amount [tolerance]
+    this.container.appendChild(this.createColored(bal.date, "date"));
+    this.container.appendChild(document.createTextNode(" balance "));
+    this.container.appendChild(document.createTextNode(bal.account));
+    this.container.appendChild(document.createTextNode("  "));
+    this.container.appendChild(this.createColored(bal.amount.value, "amount"));
+    this.container.appendChild(document.createTextNode(" "));
+    this.container.appendChild(this.createColored(bal.amount.currency, "currency"));
+
+    if (bal.tolerance) {
+      this.container.appendChild(document.createTextNode(" ~ "));
+      this.container.appendChild(document.createTextNode(bal.tolerance));
+    }
+
+    this.container.appendChild(document.createTextNode("\n"));
   }
 
   private handleFocusShortcuts(e: KeyboardEvent) {

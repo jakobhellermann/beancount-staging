@@ -1,7 +1,6 @@
-export interface Directive {
-  id: string;
-  transaction: Transaction;
-}
+export type Directive =
+  | ({ id: string; type: "transaction" } & Transaction)
+  | ({ id: string; type: "balance" } & Balance);
 
 export interface Transaction {
   date: string;
@@ -11,6 +10,13 @@ export interface Transaction {
   tags: string[];
   links: string[];
   postings: Posting[];
+}
+
+export interface Balance {
+  date: string;
+  account: string;
+  amount: Amount;
+  tolerance: string | null;
 }
 
 export interface Posting {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiClient } from "../src/api";
-import { TransactionRenderer } from "../src/transaction-renderer";
+import { DirectiveRenderer } from "../src/directive-renderer";
 import { filterAccounts } from "../src/account-filter";
 
 // Note: app.ts auto-initializes at module load, so we test the components
@@ -52,12 +52,12 @@ describe("App Integration", () => {
     });
   });
 
-  describe("TransactionRenderer integration", () => {
-    it("should create transaction renderer", () => {
+  describe("DirectiveRenderer integration", () => {
+    it("should create directive renderer", () => {
       const container = document.getElementById("transaction")!;
       const onInput = vi.fn();
 
-      const renderer = new TransactionRenderer(container, onInput, [], filterAccounts);
+      const renderer = new DirectiveRenderer(container, onInput, [], filterAccounts);
 
       expect(renderer).toBeTruthy();
     });
@@ -66,7 +66,7 @@ describe("App Integration", () => {
       const container = document.getElementById("transaction")!;
       const onInput = vi.fn();
 
-      const renderer = new TransactionRenderer(container, onInput, [], filterAccounts);
+      const renderer = new DirectiveRenderer(container, onInput, [], filterAccounts);
 
       const transaction = {
         date: "2024-01-15",
@@ -150,7 +150,7 @@ describe("App Integration", () => {
       const container = document.getElementById("transaction")!;
       const onInput = vi.fn();
 
-      const renderer = new TransactionRenderer(container, onInput, [], filterAccounts);
+      const renderer = new DirectiveRenderer(container, onInput, [], filterAccounts);
 
       const transaction = {
         date: "2024-01-15",
@@ -172,7 +172,7 @@ describe("App Integration", () => {
       const container = document.getElementById("transaction")!;
       const onInput = vi.fn();
 
-      const renderer = new TransactionRenderer(container, onInput, [], filterAccounts);
+      const renderer = new DirectiveRenderer(container, onInput, [], filterAccounts);
 
       const transaction = {
         date: "2024-01-15",

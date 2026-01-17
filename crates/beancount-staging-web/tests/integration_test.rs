@@ -85,7 +85,10 @@ async fn test_api_workflow() {
         .expect("transaction json parse failed");
 
     // Check structured transaction data (should be the "New Transaction")
-    let txn_data = &txn["transaction"]["transaction"];
+    let txn_data = &txn["transaction"];
+
+    // Check type
+    assert_eq!(txn_data["type"], "transaction", "should be a transaction");
 
     // Check date
     assert_eq!(txn_data["date"], "2024-01-20", "should have correct date");

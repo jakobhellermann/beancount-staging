@@ -95,6 +95,15 @@ impl AppStateInner {
 }
 
 impl AppState {
+    pub fn lock(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, AppStateInner>,
+        std::sync::PoisonError<std::sync::MutexGuard<'_, AppStateInner>>,
+    > {
+        self.inner.lock()
+    }
+
     pub fn new(
         journal_paths: Vec<PathBuf>,
         staging_paths: Vec<PathBuf>,

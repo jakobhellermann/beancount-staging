@@ -6,7 +6,7 @@ run *args:
 
 real *args:
     just frontend build
-    cargo run -q -p beancount-staging-cli -- -j ~/finances/journal.beancount -j ~/finances/src/ignored.beancount -s ~/finances/extracted.beancount {{ args }}
+    cargo run -q -p beancount-staging-cli -- -j ~/finances/src/transactions.beancount -j ~/finances/journal.beancount -j ~/finances/src/ignored.beancount -s ~/finances/extracted.beancount {{ args }}
 
 # development
 
