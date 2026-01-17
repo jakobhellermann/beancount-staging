@@ -22,3 +22,5 @@ ratatui = { version = "0.30", default-features = false, features = [
   "underline-color",
 ] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
