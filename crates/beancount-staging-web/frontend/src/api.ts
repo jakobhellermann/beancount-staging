@@ -11,6 +11,12 @@ export interface TransactionResponse {
   predicted_account?: string;
 }
 
+export interface TransactionPatch {
+  account: string;
+  payee?: string;
+  narration?: string;
+}
+
 export interface CommitResponse {
   ok: boolean;
   remaining_count: number;
@@ -33,11 +39,11 @@ export class ApiClient {
     return await resp.json();
   }
 
-  async commitTransaction(id: string, expenseAccount: string): Promise<CommitResponse> {
+  async commitTransaction(id: string, patch: TransactionPatch): Promise<CommitResponse> {
     const resp = await fetch(`/api/transaction/${id}/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expense_account: expenseAccount }),
+      body: JSON.stringify(patch),
     });
 
     if (!resp.ok) {

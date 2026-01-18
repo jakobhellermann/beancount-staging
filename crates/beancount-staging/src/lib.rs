@@ -9,6 +9,7 @@ pub type Transaction = beancount_parser::Transaction<Decimal>;
 pub type Decimal = rust_decimal::Decimal;
 
 pub use anyhow::Result;
+use beancount_parser::metadata::Value;
 
 use std::{io::BufWriter, path::Path};
 
@@ -31,10 +32,13 @@ pub fn read_directives(file: impl AsRef<Path>) -> Result<Vec<Directive>> {
 ///
 /// This modifies the transaction by:
 /// - Changing the flag from `!` to `*`
+/// - Optionally updating payee and narration if provided
 /// - Adding a balancing posting with the expense account (amount is inferred by beancount)
 pub fn commit_transaction(
     directive: &Directive,
     expense_account: &str,
+    payee: Option<&str>,
+    narration: Option<&str>,
     journal_path: &Path,
 ) -> Result<()> {
     use anyhow::Context;
@@ -46,6 +50,38 @@ pub fn commit_transaction(
     if let DirectiveContent::Transaction(ref mut txn) = directive.content {
         // Change flag from ! to *
         txn.flag = Some('*');
+
+        let meta = &mut txn
+            .postings
+            .first_mut()
+            .expect("TODO: no first account")
+            .metadata;
+
+        // Update payee if provided, saving original as metadata on first posting
+        if let Some(new_payee) = payee {
+            if let Some(original_payee) = &txn.payee
+                && original_payee != new_payee
+            {
+                meta.insert(
+                    "source_payee".parse().unwrap(),
+                    Value::String(original_payee.clone()),
+                );
+            }
+            txn.payee = Some(new_payee.to_string());
+        }
+
+        // Update narration if provided, saving original as metadata on first posting
+        if let Some(new_narration) = narration {
+            if let Some(original_narration) = &txn.narration
+                && original_narration != new_narration
+            {
+                meta.insert(
+                    "source_desc".parse().unwrap(),
+                    Value::String(original_narration.clone()),
+                );
+            }
+            txn.narration = Some(new_narration.to_string());
+        }
 
         // Add balancing posting with expense account (no amount - beancount infers it)
         let account: beancount_parser::Account = expense_account
