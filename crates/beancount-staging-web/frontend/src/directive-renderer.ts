@@ -1,11 +1,8 @@
 import type { Transaction, Balance } from "./model/beancount";
+import type { TransactionPatch } from "./api";
 import { Autocomplete, type FilterFunction } from "./autocomplete";
 
-export interface EditState {
-  account: string;
-  payee?: string;
-  narration?: string;
-}
+export type EditState = TransactionPatch;
 
 const EDITABLE_SHORTCUTS = {
   payee: "p",

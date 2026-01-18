@@ -139,7 +139,9 @@ async fn test_api_workflow() {
     // Test 4: Commit transaction successfully
     let commit_response: serde_json::Value = client
         .post(format!("{}/api/transaction/{}/commit", base, first_txn_id))
-        .json(&serde_json::json!({"expense_account": "Expenses:Groceries"}))
+        .json(&serde_json::json!({
+            "account": "Expenses:Groceries"
+        }))
         .send()
         .await
         .expect("commit request failed")

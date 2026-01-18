@@ -91,12 +91,12 @@ describe("ApiClient", () => {
         json: async () => mockResponse,
       });
 
-      const result = await client.commitTransaction("txn-1", "Expenses:Food");
+      const result = await client.commitTransaction("txn-1", { account: "Expenses:Food" });
 
       expect(global.fetch).toHaveBeenCalledWith("/api/transaction/txn-1/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expense_account: "Expenses:Food" }),
+        body: JSON.stringify({ account: "Expenses:Food" }),
       });
       expect(result).toEqual(mockResponse);
     });

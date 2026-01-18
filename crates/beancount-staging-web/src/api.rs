@@ -143,9 +143,11 @@ pub struct TransactionResponse {
     pub predicted_account: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitRequest {
-    pub expense_account: String,
+    pub account: String,
+    pub payee: Option<String>,
+    pub narration: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -200,25 +202,24 @@ pub async fn commit_transaction(
         .get(&id)
         .ok_or(StatusCode::NOT_FOUND.into_response())?;
 
-    let expense_account = payload.expense_account;
-
     // Use library function to commit transaction
     let journal_path = &inner.reconcile_config.journal_paths[0];
-    beancount_staging::commit_transaction(directive, &expense_account, journal_path).map_err(
-        |e| {
-            tracing::error!("Failed to commit transaction {}: {}", id, e);
-            ErrorResponse {
-                error: format!("Failed to commit: {}", e),
-            }
-            .into_response()
-        },
-    )?;
+    beancount_staging::commit_transaction(
+        directive,
+        &payload.account,
+        payload.payee.as_deref(),
+        payload.narration.as_deref(),
+        journal_path,
+    )
+    .map_err(|e| {
+        tracing::error!("Failed to commit transaction {}: {}", id, e);
+        ErrorResponse {
+            error: format!("Failed to commit: {}", e),
+        }
+        .into_response()
+    })?;
 
-    tracing::info!(
-        "Committed transaction {} with expense account '{}'",
-        id,
-        expense_account
-    );
+    tracing::info!("Committed transaction {} with patch: {:?}", id, payload);
 
     // Remove from staging items
     inner.staging_items.remove(&id);

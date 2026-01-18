@@ -154,15 +154,14 @@ class StagingApp {
     }
 
     const editState = this.editStates.get(currentDirective.id);
-    const expenseAccount = editState?.account;
-    if (!expenseAccount || !expenseAccount.trim()) {
+    if (!editState?.account || !editState.account.trim()) {
       this.showError("Please enter an expense account");
       return;
     }
 
     try {
-      // Commit transaction with expense account
-      const data = await this.api.commitTransaction(currentDirective.id, expenseAccount);
+      // Commit transaction with patch containing all edited fields
+      const data = await this.api.commitTransaction(currentDirective.id, editState);
 
       if (data.remaining_count === 0) {
         this.showSuccess("All transactions committed!");
