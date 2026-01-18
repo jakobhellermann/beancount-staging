@@ -122,10 +122,10 @@ class StagingApp {
 
       const data = await this.api.getTransaction(currentDirective.id);
 
-      // Initialize editState with default account if not present
+      // Initialize editState with predicted or default account if not present
       if (!this.editStates.has(currentDirective.id)) {
         this.editStates.set(currentDirective.id, {
-          account: "Expenses:",
+          account: data.predicted_account ?? "Expenses:",
         });
       }
 

@@ -1,10 +1,14 @@
-use beancount_staging::Directive;
+use beancount_parser::Account;
 use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, ReconcileState};
+use beancount_staging::{Directive, DirectiveContent};
+use beancount_staging_predictor::preprocessing::Alpha;
+use beancount_staging_predictor::{DecisionTreePredictor, PredictionInput, Predictor};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokio::sync::broadcast;
 
 pub fn generate_directive_id(directive: &Directive) -> String {
@@ -39,6 +43,36 @@ pub fn generate_directive_id(directive: &Directive) -> String {
     format!("{}-{}", directive.date, hash_str)
 }
 
+fn train_predictor(reconcile_state: &ReconcileState) -> Option<DecisionTreePredictor<Alpha>> {
+    use beancount_staging_predictor::training::extract_training_examples;
+
+    // Extract training examples from journal directives
+    let examples = extract_training_examples(&reconcile_state.journal);
+
+    // Require minimum training data
+    const MIN_TRAINING_EXAMPLES: usize = 10;
+    if examples.len() < MIN_TRAINING_EXAMPLES {
+        tracing::warn!(
+            "Not enough training examples ({} < {}), skipping predictor training",
+            examples.len(),
+            MIN_TRAINING_EXAMPLES
+        );
+        return None;
+    }
+
+    let start = Instant::now();
+
+    // Train the predictor
+    let predictor = DecisionTreePredictor::<Alpha>::train(&examples);
+    tracing::info!(
+        "Training predictor with {} examples took {:?}",
+        examples.len(),
+        start.elapsed()
+    );
+
+    Some(predictor)
+}
+
 #[derive(Clone, Debug)]
 pub struct FileChangeEvent;
 
@@ -55,6 +89,7 @@ pub struct AppStateInner {
     // derived data
     pub staging_items: BTreeMap<String, Directive>,
     pub available_accounts: BTreeSet<String>,
+    pub predictor: Option<DecisionTreePredictor<Alpha>>,
 }
 
 impl AppStateInner {
@@ -66,6 +101,7 @@ impl AppStateInner {
             reconcile_state: ReconcileState::default(),
             staging_items: BTreeMap::new(),
             available_accounts: BTreeSet::default(),
+            predictor: None,
         }
     }
 
@@ -90,7 +126,40 @@ impl AppStateInner {
         // Extract all available accounts from journal
         self.available_accounts = self.reconcile_state.accounts();
 
+        // Note: We don't retrain the predictor on every reload since it's expensive
+        // and the journal changes frequently (on every commit). The predictor is only
+        // trained once at startup and can use slightly stale data.
+
         Ok(())
+    }
+
+    fn retrain(&mut self) -> anyhow::Result<()> {
+        self.predictor = train_predictor(&self.reconcile_state);
+        Ok(())
+    }
+
+    pub fn predict(&self, directive: &Directive) -> Option<Account> {
+        let Some(predictor) = &self.predictor else {
+            return None;
+        };
+
+        let DirectiveContent::Transaction(txn) = &directive.content else {
+            return None;
+        };
+        // TODO: handle source account in second posting?
+        let source_account = txn
+            .postings
+            .first()
+            .map(|p| p.account.clone())
+            .unwrap_or_else(|| "Assets:Unknown".parse().unwrap());
+
+        let input = PredictionInput {
+            source_account,
+            payee: txn.payee.clone(),
+            narration: txn.narration.clone().unwrap_or_default(),
+        };
+
+        predictor.predict(&input)
     }
 }
 
@@ -111,6 +180,7 @@ impl AppState {
     ) -> anyhow::Result<Self> {
         let mut state = AppStateInner::new(journal_paths, staging_paths);
         state.reload()?;
+        state.retrain()?;
 
         Ok(Self {
             inner: Arc::new(Mutex::new(state)),

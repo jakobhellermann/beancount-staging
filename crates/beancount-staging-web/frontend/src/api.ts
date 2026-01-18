@@ -8,6 +8,7 @@ export interface InitResponse {
 
 export interface TransactionResponse {
   transaction: Directive;
+  predicted_account?: string;
 }
 
 export interface CommitResponse {

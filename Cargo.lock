@@ -225,6 +225,7 @@ dependencies = [
  "axum",
  "beancount-parser",
  "beancount-staging",
+ "beancount-staging-predictor",
  "futures",
  "mime_guess",
  "notify",
