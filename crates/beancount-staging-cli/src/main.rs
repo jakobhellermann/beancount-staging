@@ -32,8 +32,6 @@ struct FileArgs {
     staging_file: Vec<PathBuf>,
 }
 
-const DEFAULT_PORT: u16 = 8472;
-
 #[derive(Subcommand)]
 enum Commands {
     /// Start web server for interactive review (default)
@@ -57,9 +55,9 @@ async fn main() -> Result<()> {
     clap_complete::CompleteEnv::with_factory(Args::command).complete();
 
     let args = Args::parse();
-    let command = args
-        .command
-        .unwrap_or(Commands::Serve { port: DEFAULT_PORT });
+    let command = args.command.unwrap_or(Commands::Serve {
+        port: beancount_staging_web::DEFAULT_PORT,
+    });
     match command {
         Commands::Diff => show::show_diff(args.files.journal_file, args.files.staging_file),
         Commands::Serve { port } => {
