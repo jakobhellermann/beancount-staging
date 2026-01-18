@@ -6,6 +6,7 @@ repository.workspace = true
 
 [dependencies]
 beancount-staging = { path = "../beancount-staging" }
+beancount-staging-predictor = { path = "../beancount-staging-predictor" }
 beancount-parser.workspace = true
 anyhow.workspace = true
 

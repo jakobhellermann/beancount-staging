@@ -140,6 +140,7 @@ pub struct SerializedAmount {
 #[derive(Serialize)]
 pub struct TransactionResponse {
     pub transaction: SerializedDirective,
+    pub predicted_account: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -179,9 +180,11 @@ pub async fn get_transaction(
     let inner = state.lock().unwrap();
 
     let directive = inner.staging_items.get(&id).ok_or(StatusCode::NOT_FOUND)?;
+    let predicted_account = inner.predict(directive);
 
     Ok(Json(TransactionResponse {
         transaction: serialize_directive(directive),
+        predicted_account: predicted_account.map(|account| account.to_string()),
     }))
 }
 
