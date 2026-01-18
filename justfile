@@ -29,6 +29,12 @@ predict-plot:
 frontend *script:
     @cd crates/beancount-staging-web/frontend && npm --silent run {{ script }}
 
+maturin *args:
+    @cd crates/beancount-staging-py && CARGO_TARGET_DIR=target maturin {{ args }}
+
+maturin-run:
+    just maturin develop && uv run python crates/beancount-staging-py/example/run.py
+
 check:
     # format
     just frontend check

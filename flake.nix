@@ -50,6 +50,9 @@
               "beancount-parser-2.2.1" = "sha256-MpupKVd41dPsmx3ghxNgF4UkDtueCKObywSkj499TZ0=";
             };
           };
+          env = {
+            PYO3_PYTHON = "${pkgs.python3}/bin/python";
+          };
 
           nativeBuildInputs = nativeBuildInputs ++ [
             pkgs.nodejs
