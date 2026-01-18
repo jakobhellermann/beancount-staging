@@ -133,7 +133,7 @@ impl AppStateInner {
         Ok(())
     }
 
-    fn retrain(&mut self) -> anyhow::Result<()> {
+    pub fn retrain(&mut self) -> anyhow::Result<()> {
         self.predictor = train_predictor(&self.reconcile_state);
         Ok(())
     }
@@ -180,7 +180,6 @@ impl AppState {
     ) -> anyhow::Result<Self> {
         let mut state = AppStateInner::new(journal_paths, staging_paths);
         state.reload()?;
-        state.retrain()?;
 
         Ok(Self {
             inner: Arc::new(Mutex::new(state)),

@@ -3,6 +3,7 @@ mod state;
 mod static_files;
 mod watcher;
 
+use anyhow::Result;
 use axum::{
     Router,
     routing::{get, post},
@@ -11,13 +12,31 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
     path::PathBuf,
 };
+use tokio::{net::TcpListener, task::spawn_blocking};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 use state::{AppState, FileChangeEvent};
 use watcher::FileWatcher;
 
+// also change the clap default
+pub const DEFAULT_PORT: u16 = 8472;
+
 pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> anyhow::Result<()> {
+    let app = router(journal, staging)?;
+
+    let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
+    let listener = try_listen(address).await?;
+    tracing::info!("Server listening on http://{}", address);
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    Ok(())
+}
+
+pub fn router(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<Router> {
     // Initialize tracing if not already initialized
     let _ = tracing_subscriber::registry()
         .with(
@@ -29,7 +48,16 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
 
     // Initialize application state first
     let (file_change_tx, _rx) = tokio::sync::broadcast::channel(100);
-    let state = AppState::new(journal.clone(), staging.clone(), file_change_tx.clone())?;
+    let state = AppState::new(journal, staging, file_change_tx.clone())?;
+
+    spawn_blocking({
+        let state = state.clone();
+        move || {
+            if let Err(e) = state.inner.lock().unwrap().retrain() {
+                tracing::error!("Error trying to retrain: {e}");
+            }
+        }
+    });
 
     let _watcher = {
         let state_ = state.lock().unwrap();
@@ -78,21 +106,43 @@ pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> any
         .layer(TraceLayer::new_for_http())
         .fallback(static_files::static_handler);
 
-    // Start server
-    let listen = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
-    let listener = tokio::net::TcpListener::bind(listen).await.map_err(|e| {
+    Ok(app)
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+}
+
+async fn try_listen(address: SocketAddrV4) -> Result<TcpListener> {
+    let listener = TcpListener::bind(address).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::AddrInUse {
             anyhow::anyhow!(
                 "Port {} is already in use. Please stop the existing server or choose a different port.",
-                port
+                address.port()
             )
         } else {
             anyhow::Error::from(e)
         }
     })?;
-    tracing::info!("Server listening on http://{}", listen);
-
-    axum::serve(listener, app).await?;
-
-    Ok(())
+    Ok(listener)
 }
