@@ -1,12 +1,12 @@
 use anyhow::Result;
 use notify::{EventKind, RecursiveMode};
-use notify_debouncer_full::{Debouncer, NoCache, new_debouncer};
+use notify_debouncer_full::{Debouncer, RecommendedCache, new_debouncer};
 use std::path::Path;
 use std::time::Duration;
 use tracing::{error, info};
 
 pub struct FileWatcher {
-    _debouncer: Debouncer<notify::RecommendedWatcher, NoCache>,
+    _debouncer: Debouncer<notify::RecommendedWatcher, RecommendedCache>,
 }
 
 impl FileWatcher {
