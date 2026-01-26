@@ -1,0 +1,5 @@
+[journal]
+files = ["docs/examples/journal.beancount"]
+
+[staging]
+files = ["docs/examples/staging.beancount"]
