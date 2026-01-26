@@ -1,3 +1,4 @@
+mod config;
 #[allow(dead_code)]
 mod review;
 mod show;
@@ -5,7 +6,7 @@ mod show;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Args as ClapArgs, CommandFactory as _, Parser, Subcommand};
+use clap::{Args as ClapArgs, CommandFactory as _, Parser, Subcommand, error::ErrorKind};
 
 #[derive(Parser)]
 #[command(
@@ -24,12 +25,16 @@ struct Args {
 #[derive(ClapArgs)]
 struct FileArgs {
     /// Journal file path. Staged transactions will be written into the first file.
-    #[arg(short, long, required = true)]
+    #[arg(short, long)]
     journal_file: Vec<PathBuf>,
 
-    /// Staging file path
-    #[arg(short, long, required = true)]
+    /// Staging file path.
+    #[arg(short, long)]
     staging_file: Vec<PathBuf>,
+
+    /// Config file path to load paths from. If not provided, will look for beancount-staging.toml or .beancount-staging.toml in current directory.
+    #[arg(short, long, global = true)]
+    config: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -54,15 +59,69 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
     clap_complete::CompleteEnv::with_factory(Args::command).complete();
 
     let args = Args::parse_from(args);
+    let mut cmd = Args::command();
+
+    // load config
+    let mut config = if let Some(config_path) = args.files.config {
+        Some(config::Config::load_from_file(&config_path)?)
+    } else {
+        config::Config::find_and_load()?
+    };
+
+    let mut journal_paths = config
+        .as_mut()
+        .map(|(base_dir, c)| {
+            c.journal
+                .files
+                .iter()
+                .map(|path| base_dir.join(path))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut staging_paths = config
+        .as_mut()
+        .map(|(base_dir, c)| {
+            c.staging
+                .files
+                .iter()
+                .map(|path| base_dir.join(path))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    // override from cli
+    if !args.files.journal_file.is_empty() {
+        journal_paths = args.files.journal_file;
+    }
+    if !args.files.staging_file.is_empty() {
+        staging_paths = args.files.staging_file;
+    }
+
+    // Validate that we have both journal and staging paths
+    if journal_paths.is_empty() {
+        cmd.error(
+            ErrorKind::MissingRequiredArgument,
+            "Journal file path required:\n    Pass via --journal-file <JOURNAL_FILE> or beancount-staging.toml",
+        )
+        .exit();
+    }
+    if staging_paths.is_empty() {
+        cmd.error(
+            ErrorKind::MissingRequiredArgument,
+            "Staging file path required:\n    Pass via --staging-file <STAGING_FILE> or beancount-staging.toml",
+        )
+        .exit();
+    }
+
     let command = args.command.unwrap_or(Commands::Serve {
         port: beancount_staging_web::DEFAULT_PORT,
     });
     match command {
-        Commands::Diff => show::show_diff(args.files.journal_file, args.files.staging_file),
+        Commands::Diff => show::show_diff(journal_paths, staging_paths),
         Commands::Serve { port } => {
-            beancount_staging_web::run(args.files.journal_file, args.files.staging_file, port).await
+            beancount_staging_web::run(journal_paths, staging_paths, port).await
         } /*Commands::Cli => {
-                review::review_interactive(args.files.journal_file, args.files.staging_file)
+                review::review_interactive(journal_paths, staging_paths)
           }*/
     }
 }
