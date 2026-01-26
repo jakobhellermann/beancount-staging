@@ -32,7 +32,13 @@ fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transact
         .and_then(|x| x.as_string())
         .or(journal.narration.as_deref());
 
-    journal_payee == staging.payee.as_deref() && journal_narration == staging.narration.as_deref()
+    // Normalize empty strings to None for comparison
+    let journal_payee = journal_payee.filter(|s| !s.is_empty());
+    let staging_payee = staging.payee.as_deref().filter(|s| !s.is_empty());
+    let journal_narration = journal_narration.filter(|s| !s.is_empty());
+    let staging_narration = staging.narration.as_deref().filter(|s| !s.is_empty());
+
+    journal_payee == staging_payee && journal_narration == staging_narration
 }
 
 pub fn journal_matches_staging(journal: &Directive, staging: &Directive) -> bool {
@@ -462,5 +468,59 @@ continued here"
 
         // Should match because there's no metadata, so it uses current values
         assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_with_narration_only() {
+        // When both have only narration (no payee), should match
+        let journal = r#"
+2025-12-01 * "description"
+    Assets:Account  -99.00 EUR
+    Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 ! "description"
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_narration_only_with_empty_payee() {
+        // When journal has narration only and staging has empty payee + narration, should match
+        let journal = r#"
+2025-12-01 * "description"
+    Assets:Account  -99.00 EUR
+    Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 ! "" "description"
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn dont_match_narration_vs_payee() {
+        // When journal has narration "foo" and staging has payee "foo" with empty narration, should not match
+        let journal = r#"
+2025-12-01 * "foo"
+    Assets:Account  -99.00 EUR
+    Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 ! "foo" ""
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(!journal_matches_staging(&directive, &staging));
     }
 }
