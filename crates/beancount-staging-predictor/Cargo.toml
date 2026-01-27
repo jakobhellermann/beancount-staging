@@ -4,18 +4,6 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
-[[bin]]
-name = "beancount-predictor-eval"
-path = "src/bin/evaluate.rs"
-
-[[bin]]
-name = "plot-prediction"
-path = "src/bin/plot_prediction.rs"
-
-[[bin]]
-name = "inspect-preprocessing"
-path = "src/bin/inspect_preprocessing.rs"
-
 [dependencies]
 anyhow.workspace = true
 beancount-parser.workspace = true

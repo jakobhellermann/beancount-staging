@@ -9,14 +9,14 @@ real *args:
     cargo run -q -p beancount-staging-cli -- -j ~/finances/src/transactions.beancount -j ~/finances/journal.beancount -j ~/finances/src/ignored.beancount -s ~/finances/extracted.beancount {{ args }}
 
 predict-eval *args:
-    cargo run --release -p beancount-staging-predictor --bin beancount-predictor-eval -- -j ~/finances/src/transactions.beancount -j ~/finances/journal.beancount -j ~/finances/src/ignored.beancount {{ args }}
+    cargo run -r -p beancount-staging-predictor --example evaluate -- -j ~/finances/src/transactions.beancount -j ~/finances/journal.beancount -j ~/finances/src/ignored.beancount {{ args }}
 
 predict-plot:
     #!/usr/bin/env bash
     set -euo pipefail
     cd crates/beancount-staging-predictor
     echo "Generating learning curve data
-    cargo run --release --bin plot-prediction -- \
+    cargo run --release --example plot_prediction -- \
         -j ~/finances/src/transactions.beancount \
         -j ~/finances/journal.beancount \
         -j ~/finances/src/ignored.beancount \
