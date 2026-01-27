@@ -5,19 +5,35 @@ fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transact
     // tags can be anything
     // links can be anything
 
-    let postings_match = match (journal.postings.as_slice(), staging.postings.as_slice()) {
-        (j, [s]) => {
-            let [j0, ..] = j else { return false };
-            s.account == j0.account
-                && s.amount == j0.amount
-                && s.cost == j0.cost
-                && s.price == j0.price
-        }
-        (_, &[]) => unreachable!(),
-        (_, &[..]) => unreachable!(),
-    };
-    if !postings_match {
+    // The primary account (first posting) must match exactly
+    let (Some(staging_primary), Some(journal_primary)) =
+        (staging.postings.first(), journal.postings.first())
+    else {
         return false;
+    };
+
+    let primary_matches = staging_primary.account == journal_primary.account
+        && staging_primary.amount == journal_primary.amount
+        && staging_primary.cost == journal_primary.cost
+        && staging_primary.price == journal_primary.price;
+
+    if !primary_matches {
+        return false;
+    }
+
+    // Other postings in staging are allowed to differ or be absent in journal
+    // (user might reorganize/edit expense accounts between staging and journal)
+
+    // Non-primary postings shouldn't have cost or price
+    for posting in staging.postings.iter().skip(1) {
+        if posting.cost.is_some() || posting.price.is_some() {
+            unimplemented!("Non-primary postings with cost or price are not yet supported");
+        }
+    }
+    for posting in journal.postings.iter().skip(1) {
+        if posting.cost.is_some() || posting.price.is_some() {
+            unimplemented!("Non-primary postings with cost or price are not yet supported");
+        }
     }
 
     let first_posting = journal.postings.first().expect("TODO: no accounts?");
@@ -67,6 +83,7 @@ pub fn journal_matches_staging(journal: &Directive, staging: &Directive) -> bool
 mod tests {
     use crate::{Directive, Entry, Result, reconcile::matching::journal_matches_staging};
 
+    #[track_caller]
     fn parse_single_entry(source: &str) -> Entry {
         let mut entries = beancount_parser::parse_iter(source)
             .collect::<Result<Vec<_>, _>>()
@@ -75,6 +92,7 @@ mod tests {
         assert_eq!(entries.len(), 1);
         entries.pop().unwrap()
     }
+    #[track_caller]
     fn parse_single_directive(source: &str) -> Directive {
         match parse_single_entry(source) {
             Entry::Directive(directive) => directive,
@@ -522,5 +540,319 @@ continued here"
         let staging = parse_single_directive(staging);
 
         assert!(!journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_commodity() {
+        let journal = r#"
+2025-12-10 * "" "ETF Sparplan: iShares Core MSCI Emerging Markets IMI (Acc)"
+    Assets:ScalableCapital:MsciWorldEM	3.94 IE00BKM4GZ66 {150.00 EUR}
+    Assets:ScalableCapital:Cash	-150.00 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "" "ETF Sparplan: iShares Core MSCI Emerging Markets IMI (Acc)"
+    Assets:ScalableCapital:MsciWorldEM	3.94 IE00BKM4GZ66 {150.00 EUR}
+    Assets:ScalableCapital:Cash	-150.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_multiple() {
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+    Expenses:Food
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    // TODO: relax this
+    #[test]
+    fn dont_match_different_first_posting() {
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+    Expenses:Food 100 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Expenses:Fees 1 EUR
+    Assets:A -101 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(!journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_second_posting_different_account() {
+        // First posting matches, second posting has different account - still matches
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+    Expenses:Food
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Tax 1 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_three_postings() {
+        // Both have three postings, all match
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+    Expenses:Food 100 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+    Expenses:Food 100 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_staging_fewer_postings() {
+        // Staging has fewer postings than journal - matches if first posting and totals match
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Expenses:Food 50 EUR
+    Expenses:Fees 50 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Expenses:Combined 100 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_multiple_with_missing_amounts() {
+        // Journal has postings with and without explicit amounts
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+    Expenses:Food
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn dont_match_first_posting_different_cost() {
+        // First posting has different cost - should not match
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A 10 AAPL {100.00 EUR}
+    Assets:Cash -1000 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A 10 AAPL {99.00 EUR}
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(!journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn dont_match_first_posting_different_price() {
+        // First posting has different price - should not match
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A 10 AAPL @ 100.00 EUR
+    Assets:Cash -1000 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A 10 AAPL @ 99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(!journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn dont_match_first_posting_different_commodity() {
+        // First posting has different commodity - should not match
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:Stocks 10 AAPL
+    Assets:Cash -1000 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:Stocks 10 GOOGL
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(!journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_same_total_different_accounts() {
+        // First posting matches, total amount matches, but accounts differ - should match
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Fees 1 EUR
+    Expenses:Food
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -101 EUR
+    Expenses:Tax 1 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_multi_currency_same_totals() {
+        // Multiple currencies, totals match per currency
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Expenses:Fees 10 USD
+    Expenses:Food
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Expenses:Combined 10 USD
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    // TODO: relax this
+    #[test]
+    #[should_panic(expected = "Non-primary postings with cost or price are not yet supported")]
+    fn panic_on_staging_non_primary_with_cost() {
+        // Non-primary posting in staging with cost should panic
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Expenses:Food 100 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Assets:Stocks 10 AAPL {10.00 EUR}
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        journal_matches_staging(&directive, &staging);
+    }
+
+    // TODO: relax this
+    #[test]
+    #[should_panic(expected = "Non-primary postings with cost or price are not yet supported")]
+    fn panic_on_journal_non_primary_with_cost() {
+        // Non-primary posting in journal with cost should panic
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Assets:Stocks 10 AAPL {10.00 EUR}
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        journal_matches_staging(&directive, &staging);
+    }
+
+    // TODO: relax this
+    #[test]
+    #[should_panic(expected = "Non-primary postings with cost or price are not yet supported")]
+    fn panic_on_staging_non_primary_with_price() {
+        // Non-primary posting in staging with price should panic
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Expenses:Food 100 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Assets:Stocks 10 AAPL @ 10.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        journal_matches_staging(&directive, &staging);
+    }
+
+    // TODO: relax this
+    #[test]
+    #[should_panic(expected = "Non-primary postings with cost or price are not yet supported")]
+    fn panic_on_journal_non_primary_with_price() {
+        // Non-primary posting in journal with price should panic
+        let journal = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+    Assets:Stocks 10 AAPL @ 10.00 EUR
+"#;
+        let staging = r#"
+2025-12-10 * "desc"
+    Assets:A -100 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        journal_matches_staging(&directive, &staging);
     }
 }

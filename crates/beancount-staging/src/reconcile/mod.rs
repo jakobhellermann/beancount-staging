@@ -128,16 +128,9 @@ fn reconcile_bucket<'a>(
     while let Some(staging_item) = staging.pop() {
         if let DirectiveContent::Transaction(staging_item) = &staging_item.content {
             // not supported yet
-            match staging_item.postings.len() {
-                0 => {
-                    tracing::warn!("Staging transaction contains zero postings");
-                    continue;
-                }
-                1 => {}
-                _ => {
-                    tracing::warn!("Staging transaction contains more than one posting");
-                    continue;
-                }
+            if staging_item.postings.is_empty() {
+                tracing::warn!("Staging transaction contains zero postings");
+                continue;
             }
         }
 
