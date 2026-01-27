@@ -45,7 +45,8 @@ pub fn commit_transaction(
     use std::fs::OpenOptions;
     use std::io::Write;
 
-    let mut directive = directive.clone();
+    let original = directive;
+    let mut directive = original.clone();
 
     if let DirectiveContent::Transaction(ref mut txn) = directive.content {
         // Change flag from ! to *
@@ -89,6 +90,12 @@ pub fn commit_transaction(
             .with_context(|| format!("Failed to parse account name: '{}'", expense_account))?;
         txn.postings.push(beancount_parser::Posting::new(account));
     }
+
+    let does_match = reconcile::matching::journal_matches_staging(&directive, original);
+    assert!(
+        does_match,
+        "Internal error: commited transaction does not match original"
+    );
 
     // Open journal file in append mode
     let mut file = BufWriter::new(OpenOptions::new().append(true).open(journal_path)?);
