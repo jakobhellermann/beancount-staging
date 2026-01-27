@@ -24,7 +24,7 @@ clap = { version = "4.5", features = ["derive"] }
 smartcore = "0.4"
 ndarray = "0.16"
 regex = "1.11"
-rand = "0.8"
+rand = "0.9"
 
 [dev-dependencies]
 insta.workspace = true
