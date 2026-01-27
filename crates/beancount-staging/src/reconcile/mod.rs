@@ -1,6 +1,6 @@
 //! Reconciling differences between existing journal entries and a full automatic import.
 
-mod matching;
+pub(crate) mod matching;
 
 use crate::Result;
 use crate::utils::sort_merge_diff::{JoinResult, SortMergeDiff};
