@@ -241,5 +241,32 @@ pub async fn file_changes_stream(
     let rx = state.file_change_tx.subscribe();
     let stream = BroadcastStream::new(rx).map(|_| Ok(Event::default().data("reload")));
 
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    Sse::new(or_until_shutdown(stream)).keep_alive(KeepAlive::default())
+}
+
+// https://github.com/hyperium/hyper/issues/2787
+/// Run a stream until it completes or we receive the shutdown signal.
+///
+/// Uses the `async-stream` to make things easier to write.
+fn or_until_shutdown<S>(stream: S) -> impl Stream<Item = S::Item>
+where
+    S: Stream,
+{
+    async_stream::stream! {
+        futures::pin_mut!(stream);
+
+        let shutdown_signal = crate::shutdown_signal();
+        futures::pin_mut!(shutdown_signal);
+
+        loop {
+            tokio::select! {
+                Some(item) = stream.next() => {
+                    yield item
+                }
+                _ = &mut shutdown_signal => {
+                    break;
+                }
+            }
+        }
+    }
 }
