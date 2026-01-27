@@ -23,6 +23,6 @@ ratatui = { version = "0.30", default-features = false, features = [
 ] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tracing = { version = "0.1", default-features = false }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
