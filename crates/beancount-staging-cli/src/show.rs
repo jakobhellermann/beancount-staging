@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use beancount_parser::DirectiveContent;
-use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem};
+use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, StagingSource};
 
-pub fn show_diff(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<()> {
-    let state = ReconcileConfig::new(journal, staging).read()?;
+pub fn show_diff(journal: Vec<PathBuf>, staging_source: StagingSource) -> Result<()> {
+    let config = ReconcileConfig::new(journal, staging_source);
+    let state = config.read()?;
     let results = state.reconcile()?;
 
     let journal_style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Yellow)));

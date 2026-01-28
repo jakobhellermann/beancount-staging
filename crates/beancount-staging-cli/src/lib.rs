@@ -8,6 +8,7 @@ pub use beancount_staging;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use beancount_staging::reconcile::StagingSource;
 use clap::{Args as ClapArgs, CommandFactory as _, Parser, Subcommand, error::ErrorKind};
 
 #[derive(Parser)]
@@ -84,26 +85,30 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let mut staging_paths = config
-        .as_mut()
-        .map(|(base_dir, c)| {
-            c.staging
-                .files
+
+    // Extract staging source from config (either files or command)
+    let mut staging_source = config.as_mut().map(|(base_dir, c)| match &c.staging.0 {
+        StagingSource::Files(files) => StagingSource::Files(
+            files
                 .iter()
                 .map(|path| base_dir.join(path))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+                .collect::<Vec<_>>(),
+        ),
+        StagingSource::Command { command, cwd: _ } => StagingSource::Command {
+            command: command.clone(),
+            cwd: base_dir.clone(),
+        },
+    });
 
     // override from cli
     if !args.files.journal_file.is_empty() {
         journal_paths = args.files.journal_file;
     }
     if !args.files.staging_file.is_empty() {
-        staging_paths = args.files.staging_file;
+        staging_source = Some(StagingSource::Files(args.files.staging_file));
     }
 
-    // Validate that we have both journal and staging paths
+    // Validate that we have both journal and staging source
     if journal_paths.is_empty() {
         cmd.error(
             ErrorKind::MissingRequiredArgument,
@@ -111,20 +116,21 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
         )
         .exit();
     }
-    if staging_paths.is_empty() {
+    if staging_source.is_none() {
         cmd.error(
             ErrorKind::MissingRequiredArgument,
-            "Staging file path required:\n    Pass via --staging-file <STAGING_FILE> or beancount-staging.toml",
+            "Staging file path or command required:\n    Pass via --staging-file <STAGING_FILE> or beancount-staging.toml",
         )
         .exit();
     }
+    let staging_source = staging_source.unwrap();
 
     let command = args.command.unwrap_or(Commands::Serve {
         port: Some(beancount_staging_web::DEFAULT_PORT),
         socket: None,
     });
     match command {
-        Commands::Diff => show::show_diff(journal_paths, staging_paths),
+        Commands::Diff => show::show_diff(journal_paths, staging_source),
         Commands::Serve { port, socket } => {
             let listener = if let Some(socket_path) = socket {
                 beancount_staging_web::ListenerType::UnixSocket(socket_path)
@@ -133,9 +139,9 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
                     port.unwrap_or(beancount_staging_web::DEFAULT_PORT),
                 )
             };
-            beancount_staging_web::run(journal_paths, staging_paths, listener).await
+            beancount_staging_web::run(journal_paths, staging_source, listener).await
         } /*Commands::Cli => {
-                review::review_interactive(journal_paths, staging_paths)
+                review::review_interactive(journal_paths, staging_source)
           }*/
     }
 }

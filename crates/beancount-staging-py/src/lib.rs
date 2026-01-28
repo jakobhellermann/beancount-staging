@@ -6,6 +6,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 #[pymodule]
 mod beancount_staging {
     use crate::run_async;
+    use beancount_staging_cli::beancount_staging::reconcile::StagingSource;
     use beancount_staging_web::ListenerType;
     use pyo3::prelude::*;
     use std::path::PathBuf;
@@ -31,7 +32,11 @@ mod beancount_staging {
     ) -> PyResult<()> {
         run_async(
             py,
-            beancount_staging_web::run(journal_files, staging_files, ListenerType::Tcp(port)),
+            beancount_staging_web::run(
+                journal_files,
+                StagingSource::Files(staging_files),
+                ListenerType::Tcp(port),
+            ),
         )
     }
 }

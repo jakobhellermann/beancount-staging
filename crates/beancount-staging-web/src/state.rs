@@ -1,5 +1,5 @@
 use beancount_parser::Account;
-use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, ReconcileState};
+use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, ReconcileState, StagingSource};
 use beancount_staging::{Directive, DirectiveContent};
 use beancount_staging_predictor::preprocessing::Alpha;
 use beancount_staging_predictor::{DecisionTreePredictor, PredictionInput, Predictor};
@@ -93,8 +93,8 @@ pub struct AppStateInner {
 }
 
 impl AppStateInner {
-    fn new(journal_paths: Vec<PathBuf>, staging_paths: Vec<PathBuf>) -> Self {
-        let reconcile_config = ReconcileConfig::new(journal_paths, staging_paths);
+    fn new(journal_paths: Vec<PathBuf>, staging_source: StagingSource) -> Self {
+        let reconcile_config = ReconcileConfig::new(journal_paths, staging_source);
 
         AppStateInner {
             reconcile_config,
@@ -175,10 +175,10 @@ impl AppState {
 
     pub fn new(
         journal_paths: Vec<PathBuf>,
-        staging_paths: Vec<PathBuf>,
+        staging_source: StagingSource,
         file_change_tx: broadcast::Sender<FileChangeEvent>,
     ) -> anyhow::Result<Self> {
-        let mut state = AppStateInner::new(journal_paths, staging_paths);
+        let mut state = AppStateInner::new(journal_paths, staging_source);
         state.reload()?;
 
         Ok(Self {

@@ -1,3 +1,4 @@
+use beancount_staging::reconcile::StagingSource;
 use beancount_staging_web::ListenerType;
 
 #[tokio::test]
@@ -44,9 +45,13 @@ async fn test_api_workflow() {
 
     // technically this can race but it seems fast enough for now
     tokio::spawn(async move {
-        beancount_staging_web::run(journal, staging, ListenerType::Tcp(8081))
-            .await
-            .ok();
+        beancount_staging_web::run(
+            journal,
+            StagingSource::Files(staging),
+            ListenerType::Tcp(8081),
+        )
+        .await
+        .ok();
     });
 
     let client = reqwest::Client::new();
