@@ -43,7 +43,13 @@ impl FileWatcher {
 
         // Watch all provided paths
         for path in paths {
-            info!("Watching path: {:?}", path);
+            let path_display = (|| {
+                let cwd = std::env::current_dir().ok()?;
+                let base = path.strip_prefix(&cwd).ok()?;
+                Some(base)
+            })()
+            .unwrap_or(path);
+            info!("Watching path: {}", path_display.display());
             debouncer.watch(path, RecursiveMode::NonRecursive)?;
         }
 
