@@ -1,3 +1,5 @@
+use beancount_staging_web::ListenerType;
+
 #[tokio::test]
 async fn test_api_workflow() {
     // Create temporary test files
@@ -42,7 +44,7 @@ async fn test_api_workflow() {
 
     // technically this can race but it seems fast enough for now
     tokio::spawn(async move {
-        beancount_staging_web::run(journal, staging, 8081)
+        beancount_staging_web::run(journal, staging, ListenerType::Tcp(8081))
             .await
             .ok();
     });
