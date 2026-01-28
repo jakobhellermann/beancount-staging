@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use beancount_staging::reconcile::StagingSource;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,28 +50,43 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load_from_file(path: &std::path::Path) -> Result<(PathBuf, Self)> {
-        let base_dir = path.parent().map(ToOwned::to_owned).unwrap_or_default();
+    fn find_config_in_dir(dir: &Path) -> Option<PathBuf> {
+        let config_locations = [
+            dir.join("beancount-staging.toml"),
+            dir.join(".beancount-staging.toml"),
+        ];
 
-        let contents = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+        config_locations.into_iter().find(|p| p.exists())
+    }
+
+    pub fn load_from_file(path: &Path) -> Result<(PathBuf, Self)> {
+        // If path is a directory, look for config file in that directory
+        let (config_path, base_dir) = if path.is_dir() {
+            let config_path = Self::find_config_in_dir(path).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No config file found in directory: {} (tried: beancount-staging.toml, .beancount-staging.toml)",
+                    path.display()
+                )
+            })?;
+
+            (config_path, path.to_path_buf())
+        } else {
+            let base_dir = path.parent().map(ToOwned::to_owned).unwrap_or_default();
+            (path.to_path_buf(), base_dir)
+        };
+
+        let contents = std::fs::read_to_string(&config_path)
+            .with_context(|| format!("Failed to read config file: {}", config_path.display()))?;
 
         let config: Config = toml::from_str(&contents)
-            .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
+            .with_context(|| format!("Failed to parse config file: {}", config_path.display()))?;
 
         Ok((base_dir, config))
     }
 
     pub fn find_and_load() -> Result<Option<(PathBuf, Self)>> {
-        let config_locations = [
-            std::path::Path::new("beancount-staging.toml"),
-            std::path::Path::new(".beancount-staging.toml"),
-        ];
-
-        for location in &config_locations {
-            if location.exists() {
-                return Self::load_from_file(location).map(Some);
-            }
+        if let Some(config_path) = Self::find_config_in_dir(Path::new(".")) {
+            return Self::load_from_file(&config_path).map(Some);
         }
 
         Ok(None)

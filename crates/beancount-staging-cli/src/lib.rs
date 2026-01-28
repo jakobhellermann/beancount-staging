@@ -35,7 +35,7 @@ struct FileArgs {
     #[arg(short, long)]
     staging_file: Vec<PathBuf>,
 
-    /// Config file path to load paths from. If not provided, will look for beancount-staging.toml or .beancount-staging.toml in current directory.
+    /// Config file or directory path. If a directory is provided, will look for beancount-staging.toml or .beancount-staging.toml in that directory. If not provided, will look in current directory.
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
 }
