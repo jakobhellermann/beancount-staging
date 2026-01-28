@@ -8,6 +8,7 @@ use axum::{
     Router,
     routing::{get, post},
 };
+use beancount_staging::reconcile::StagingSource;
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
     path::PathBuf,
@@ -30,10 +31,10 @@ pub enum ListenerType {
 
 pub async fn run(
     journal: Vec<PathBuf>,
-    staging: Vec<PathBuf>,
+    staging_source: StagingSource,
     listener_type: ListenerType,
 ) -> anyhow::Result<()> {
-    let app = router(journal, staging)?;
+    let app = router(journal, staging_source)?;
 
     match listener_type {
         ListenerType::Tcp(port) => {
@@ -63,7 +64,7 @@ pub async fn run(
     Ok(())
 }
 
-pub fn router(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<Router> {
+pub fn router(journal: Vec<PathBuf>, staging_source: StagingSource) -> Result<Router> {
     // Initialize tracing if not already initialized
     let _ = tracing_subscriber::registry()
         .with(
@@ -75,7 +76,7 @@ pub fn router(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<Router> {
 
     // Initialize application state first
     let (file_change_tx, _rx) = tokio::sync::broadcast::channel(100);
-    let state = AppState::new(journal, staging, file_change_tx.clone())?;
+    let state = AppState::new(journal, staging_source, file_change_tx.clone())?;
 
     spawn_blocking({
         let state = state.clone();

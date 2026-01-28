@@ -3,13 +3,13 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use beancount_staging::{
     Directive,
-    reconcile::{ReconcileConfig, ReconcileItem},
+    reconcile::{ReconcileConfig, ReconcileItem, StagingSource},
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::time::Duration;
 
-pub fn review_interactive(journal: Vec<PathBuf>, staging: Vec<PathBuf>) -> Result<()> {
-    let state = ReconcileConfig::new(journal.clone(), staging).read()?;
+pub fn review_interactive(journal: Vec<PathBuf>, staging_source: StagingSource) -> Result<()> {
+    let state = ReconcileConfig::new(journal.clone(), staging_source).read()?;
     let results = state.reconcile()?;
 
     // Filter only staging items

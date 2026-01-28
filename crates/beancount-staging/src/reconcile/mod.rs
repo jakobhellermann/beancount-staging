@@ -17,21 +17,30 @@ pub enum ReconcileItem<'a> {
 
 pub type SourceSet = HashSet<PathBuf>;
 
+#[derive(Debug, Clone)]
+pub enum StagingSource {
+    Files(Vec<PathBuf>),
+    Command { command: Vec<String>, cwd: PathBuf },
+}
+
 pub struct ReconcileConfig {
     pub journal_paths: Vec<PathBuf>,
-    pub staging_paths: Vec<PathBuf>,
+    pub staging_source: StagingSource,
 }
 impl ReconcileConfig {
-    pub fn new(journal_paths: Vec<PathBuf>, staging_paths: Vec<PathBuf>) -> Self {
+    pub fn new(journal_paths: Vec<PathBuf>, staging_source: StagingSource) -> Self {
         ReconcileConfig {
             journal_paths,
-            staging_paths,
+            staging_source,
         }
     }
 
     pub fn read(&self) -> Result<ReconcileState> {
-        let (journal, journal_sourceset) = read_directives(&self.journal_paths)?;
-        let (staging, staging_sourceset) = read_directives(&self.staging_paths)?;
+        let (journal, journal_sourceset) = read_directives_from_files(&self.journal_paths)?;
+        let (staging, staging_sourceset) = match &self.staging_source {
+            StagingSource::Files(paths) => read_directives_from_files(paths)?,
+            StagingSource::Command { command, cwd } => read_directives_from_command(command, cwd)?,
+        };
         Ok(ReconcileState {
             journal_sourceset,
             staging_sourceset,
@@ -66,7 +75,7 @@ impl ReconcileState {
     }
 }
 
-fn read_directives(path: &[PathBuf]) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
+fn read_directives_from_files(path: &[PathBuf]) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
     let mut directives = Vec::new();
     let files = path.iter().map(Clone::clone);
     let mut iter = beancount_parser::read_files_iter::<Decimal>(files);
@@ -78,6 +87,64 @@ fn read_directives(path: &[PathBuf]) -> Result<(Vec<Directive>, HashSet<PathBuf>
     crate::sorting::sort_dedup_directives(&mut directives);
 
     Ok((directives, iter.loaded()))
+}
+
+fn read_directives_from_command(
+    command: &[String],
+    cwd: &PathBuf,
+) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
+    use anyhow::Context;
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+
+    if command.is_empty() {
+        anyhow::bail!("Command cannot be empty");
+    }
+
+    let command_str = command.join(" ");
+
+    let start = Instant::now();
+    let output = Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(cwd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .with_context(|| format!("Failed to execute staging command: {}", command_str))?;
+    let elapsed = start.elapsed();
+
+    tracing::info!("Staging command executed in {:?}", elapsed);
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr_msg = if stderr.is_empty() {
+            String::new()
+        } else {
+            format!("\nStderr:\n{}", stderr.trim())
+        };
+        anyhow::bail!(
+            "Staging command failed with exit code {}: {}{}",
+            output.status.code().unwrap_or(-1),
+            command_str,
+            stderr_msg
+        );
+    }
+
+    let stdout = String::from_utf8(output.stdout)
+        .with_context(|| format!("Staging command output is not valid UTF-8: {}", command_str))?;
+
+    let mut directives = Vec::new();
+    for entry in beancount_parser::parse_iter::<Decimal>(&stdout) {
+        if let Entry::Directive(directive) = entry
+            .with_context(|| format!("Failed to parse staging command output: {}", command_str))?
+        {
+            directives.push(directive);
+        }
+    }
+    crate::sorting::sort_dedup_directives(&mut directives);
+
+    // For command-based staging, we don't have file paths, so return empty set
+    Ok((directives, HashSet::new()))
 }
 
 fn group_by_date(all: &[Directive]) -> BTreeMap<Date, Vec<&Directive>> {
