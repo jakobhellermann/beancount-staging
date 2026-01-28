@@ -3,6 +3,8 @@ mod config;
 mod review;
 mod show;
 
+pub use beancount_staging;
+
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -42,8 +44,12 @@ enum Commands {
     /// Start web server for interactive review (default)
     Serve {
         /// Port to listen on
-        #[arg(short, long, default_value = "8472")]
-        port: u16,
+        #[arg(short, long, default_value = "8472", conflicts_with = "socket")]
+        port: Option<u16>,
+
+        /// Unix socket path to listen on (alternative to --port)
+        #[arg(long, conflicts_with = "port")]
+        socket: Option<PathBuf>,
     },
     /// Show differences between journal and staging files and exit
     Diff,
@@ -114,12 +120,20 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
     }
 
     let command = args.command.unwrap_or(Commands::Serve {
-        port: beancount_staging_web::DEFAULT_PORT,
+        port: Some(beancount_staging_web::DEFAULT_PORT),
+        socket: None,
     });
     match command {
         Commands::Diff => show::show_diff(journal_paths, staging_paths),
-        Commands::Serve { port } => {
-            beancount_staging_web::run(journal_paths, staging_paths, port).await
+        Commands::Serve { port, socket } => {
+            let listener = if let Some(socket_path) = socket {
+                beancount_staging_web::ListenerType::UnixSocket(socket_path)
+            } else {
+                beancount_staging_web::ListenerType::Tcp(
+                    port.unwrap_or(beancount_staging_web::DEFAULT_PORT),
+                )
+            };
+            beancount_staging_web::run(journal_paths, staging_paths, listener).await
         } /*Commands::Cli => {
                 review::review_interactive(journal_paths, staging_paths)
           }*/

@@ -22,16 +22,43 @@ use watcher::FileWatcher;
 // also change the clap default
 pub const DEFAULT_PORT: u16 = 8472;
 
-pub async fn run(journal: Vec<PathBuf>, staging: Vec<PathBuf>, port: u16) -> anyhow::Result<()> {
+#[derive(Debug, Clone)]
+pub enum ListenerType {
+    Tcp(u16),
+    UnixSocket(PathBuf),
+}
+
+pub async fn run(
+    journal: Vec<PathBuf>,
+    staging: Vec<PathBuf>,
+    listener_type: ListenerType,
+) -> anyhow::Result<()> {
     let app = router(journal, staging)?;
 
-    let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
-    let listener = try_listen(address).await?;
-    tracing::info!("Server listening on http://{}", address);
+    match listener_type {
+        ListenerType::Tcp(port) => {
+            let address = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
+            let listener = try_listen_tcp(address).await?;
+            tracing::info!("Server listening on http://{}", address);
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+            axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown_signal())
+                .await?;
+        }
+        #[cfg(unix)]
+        ListenerType::UnixSocket(socket_path) => {
+            let listener = try_listen_unix(&socket_path).await?;
+            tracing::info!("Server listening on unix socket: {}", socket_path.display());
+
+            axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown_signal())
+                .await?;
+        }
+        #[cfg(not(unix))]
+        ListenerType::UnixSocket(_) => {
+            anyhow::bail!("Unix sockets are not supported on this platform");
+        }
+    }
 
     Ok(())
 }
@@ -133,7 +160,7 @@ async fn shutdown_signal() {
     }
 }
 
-async fn try_listen(address: SocketAddrV4) -> Result<TcpListener> {
+async fn try_listen_tcp(address: SocketAddrV4) -> Result<TcpListener> {
     let listener = TcpListener::bind(address).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::AddrInUse {
             anyhow::anyhow!(
@@ -144,5 +171,44 @@ async fn try_listen(address: SocketAddrV4) -> Result<TcpListener> {
             anyhow::Error::from(e)
         }
     })?;
+    Ok(listener)
+}
+
+#[cfg(unix)]
+async fn try_listen_unix(socket_path: &PathBuf) -> Result<tokio::net::UnixListener> {
+    use std::fs;
+
+    // Remove existing socket file if it exists
+    if socket_path.exists() {
+        fs::remove_file(socket_path).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to remove existing socket file at {}: {}",
+                socket_path.display(),
+                e
+            )
+        })?;
+    }
+
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = socket_path.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to create directory for socket at {}: {}",
+                parent.display(),
+                e
+            )
+        })?;
+    }
+
+    let listener = tokio::net::UnixListener::bind(socket_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to bind to Unix socket at {}: {}",
+            socket_path.display(),
+            e
+        )
+    })?;
+
     Ok(listener)
 }
