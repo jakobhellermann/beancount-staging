@@ -181,7 +181,14 @@ describe("App Integration", () => {
         narration: "Test purchase",
         tags: [],
         links: [],
-        postings: [],
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
       };
 
       renderer.render(transaction);
@@ -267,6 +274,46 @@ describe("App Integration", () => {
       // Should use the edit state value instead of the prefilled one
       const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
       expect(accountField.textContent).toBe("Expenses:Food");
+    });
+
+    it("should not show account field for balanced transactions", () => {
+      const container = document.getElementById("transaction")!;
+      const onInput = vi.fn();
+
+      const renderer = new DirectiveRenderer(container, onInput, [], filterAccounts);
+
+      const transaction = {
+        date: "2023-01-31",
+        flag: "*",
+        payee: "Bankgutschrift auf PayPal-Konto",
+        narration: null,
+        tags: [],
+        links: [],
+        postings: [
+          {
+            account: "Assets:ZeroSum:Transfers",
+            amount: { value: "-39.99", currency: "EUR" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Assets:Paypal",
+            amount: { value: "39.99", currency: "EUR" },
+            cost: null,
+            price: null,
+          },
+        ],
+      };
+
+      renderer.render(transaction);
+
+      // Should not have an account field since transaction is balanced
+      const accountField = container.querySelector('[data-key="a"]');
+      expect(accountField).toBeNull();
+
+      // Should still render the transaction
+      expect(container.textContent).toContain("Assets:ZeroSum:Transfers");
+      expect(container.textContent).toContain("Assets:Paypal");
     });
   });
 

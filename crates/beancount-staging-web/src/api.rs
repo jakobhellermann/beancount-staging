@@ -9,12 +9,41 @@ use axum::{
 };
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::convert::Infallible;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::state::{AppState, generate_directive_id};
 use beancount_staging::Directive;
+
+/// Check if a transaction is balanced (all postings have amounts and sum to zero per currency)
+fn is_transaction_balanced(txn: &beancount_staging::Transaction) -> bool {
+    // All postings must have amounts
+    if !txn.postings.iter().all(|p| p.amount.is_some()) {
+        return false;
+    }
+
+    // Group amounts by currency and sum them
+    let mut totals_by_currency: HashMap<String, beancount_staging::Decimal> = HashMap::new();
+
+    for posting in &txn.postings {
+        if let Some(amount) = &posting.amount {
+            let currency = amount.currency.to_string();
+            let current = totals_by_currency
+                .get(&currency)
+                .copied()
+                .unwrap_or_default();
+            totals_by_currency.insert(currency, current + amount.value);
+        }
+    }
+
+    // Check if all currency totals are zero (within tolerance)
+    let tolerance = beancount_staging::Decimal::new(5, 3); // 0.005
+    totals_by_currency
+        .values()
+        .all(|total| total.abs() <= tolerance)
+}
 
 fn serialize_directive(directive: &Directive) -> SerializedDirective {
     use beancount_parser::DirectiveContent;
@@ -145,7 +174,7 @@ pub struct TransactionResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitRequest {
-    pub account: String,
+    pub account: Option<String>,
     pub payee: Option<String>,
     pub narration: Option<String>,
 }
@@ -202,11 +231,30 @@ pub async fn commit_transaction(
         .get(&id)
         .ok_or(StatusCode::NOT_FOUND.into_response())?;
 
+    // Check if transaction is balanced (all postings have amounts and sum to zero)
+    let is_balanced =
+        if let beancount_staging::DirectiveContent::Transaction(txn) = &directive.content {
+            is_transaction_balanced(txn)
+        } else {
+            false
+        };
+
+    // For unbalanced transactions, require an account
+    if !is_balanced && payload.account.is_none() {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "Unbalanced transaction requires an expense account".to_string(),
+            }),
+        )
+            .into_response());
+    }
+
     // Use library function to commit transaction
     let journal_path = &inner.reconcile_config.journal_paths[0];
     beancount_staging::commit_transaction(
         directive,
-        &payload.account,
+        payload.account.as_deref(),
         payload.payee.as_deref(),
         payload.narration.as_deref(),
         journal_path,

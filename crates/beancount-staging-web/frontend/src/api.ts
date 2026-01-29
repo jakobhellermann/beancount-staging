@@ -12,7 +12,7 @@ export interface TransactionResponse {
 }
 
 export interface TransactionPatch {
-  account: string;
+  account?: string;
   payee?: string;
   narration?: string;
 }

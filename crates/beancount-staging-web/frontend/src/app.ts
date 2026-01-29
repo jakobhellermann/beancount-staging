@@ -1,4 +1,4 @@
-import { ApiClient } from "./api";
+import { ApiClient, type TransactionPatch } from "./api";
 import { DirectiveRenderer, type EditState } from "./directive-renderer";
 import { filterAccounts } from "./account-filter";
 import type { Directive } from "./model/beancount";
@@ -122,20 +122,28 @@ class StagingApp {
 
       const data = await this.api.getTransaction(currentDirective.id);
 
+      // Check if transaction is already balanced
+      const isBalanced = this.isTransactionBalanced(data.transaction);
+
       // Initialize editState with predicted or default account if not present
       if (!this.editStates.has(currentDirective.id)) {
-        // Check if transaction already has an expense posting (posting without amount)
-        let defaultAccount = data.predicted_account ?? "Expenses:";
-        if (data.transaction.type === "transaction") {
-          const expensePosting = data.transaction.postings.find((p) => !p.amount);
-          if (expensePosting) {
-            defaultAccount = expensePosting.account;
+        // For balanced transactions, don't set an account
+        if (isBalanced) {
+          this.editStates.set(currentDirective.id, {});
+        } else {
+          // Check if transaction already has an expense posting (posting without amount)
+          let defaultAccount = data.predicted_account ?? "Expenses:";
+          if (data.transaction.type === "transaction") {
+            const expensePosting = data.transaction.postings.find((p) => !p.amount);
+            if (expensePosting) {
+              defaultAccount = expensePosting.account;
+            }
           }
-        }
 
-        this.editStates.set(currentDirective.id, {
-          account: defaultAccount,
-        });
+          this.editStates.set(currentDirective.id, {
+            account: defaultAccount,
+          });
+        }
       }
 
       const editState = this.editStates.get(currentDirective.id);
@@ -162,15 +170,32 @@ class StagingApp {
       return;
     }
 
+    // Check if transaction is balanced
+    const isBalanced = this.isTransactionBalanced(currentDirective);
+
     const editState = this.editStates.get(currentDirective.id);
-    if (!editState?.account || !editState.account.trim()) {
+
+    // For unbalanced transactions, require an account
+    if (!isBalanced && (!editState?.account || !editState.account.trim())) {
       this.showError("Please enter an expense account");
       return;
     }
 
     try {
       // Commit transaction with patch containing all edited fields
-      const data = await this.api.commitTransaction(currentDirective.id, editState);
+      // For balanced transactions, omit the account field
+      const patch: TransactionPatch = {};
+      if (editState?.payee) {
+        patch.payee = editState.payee;
+      }
+      if (editState?.narration) {
+        patch.narration = editState.narration;
+      }
+      if (!isBalanced && editState?.account) {
+        patch.account = editState.account;
+      }
+
+      const data = await this.api.commitTransaction(currentDirective.id, patch);
 
       if (data.remaining_count === 0) {
         this.showSuccess("All transactions committed!");
@@ -222,6 +247,13 @@ class StagingApp {
       return;
     }
 
+    // Check if transaction is balanced
+    if (this.isTransactionBalanced(currentDirective)) {
+      // Balanced transactions can always be committed
+      this.commitBtn.disabled = false;
+      return;
+    }
+
     const editState = this.editStates.get(currentDirective.id);
     const hasAccount = editState?.account && editState.account.trim() !== "";
     this.commitBtn.disabled = !hasAccount;
@@ -240,6 +272,41 @@ class StagingApp {
   private clearMessage() {
     this.messageEl.className = "";
     this.messageEl.textContent = "";
+  }
+
+  private isTransactionBalanced(directive: Directive): boolean {
+    if (directive.type !== "transaction") {
+      return false;
+    }
+
+    // All postings must have amounts
+    if (!directive.postings.every((p) => p.amount !== null)) {
+      return false;
+    }
+
+    // Group amounts by currency
+    const totalsByCurrency = new Map<string, number>();
+
+    for (const posting of directive.postings) {
+      if (!posting.amount) {
+        return false;
+      }
+
+      const currency = posting.amount.currency;
+      const value = parseFloat(posting.amount.value);
+
+      const current = totalsByCurrency.get(currency) ?? 0;
+      totalsByCurrency.set(currency, current + value);
+    }
+
+    // Check if all currency totals are zero (within floating point precision)
+    for (const total of totalsByCurrency.values()) {
+      if (Math.abs(total) > 0.005) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }
 

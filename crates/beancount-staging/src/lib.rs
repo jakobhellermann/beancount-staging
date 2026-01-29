@@ -33,10 +33,10 @@ pub fn read_directives(file: impl AsRef<Path>) -> Result<Vec<Directive>> {
 /// This modifies the transaction by:
 /// - Changing the flag from `!` to `*`
 /// - Optionally updating payee and narration if provided
-/// - Adding a balancing posting with the expense account (amount is inferred by beancount)
+/// - Adding a balancing posting with the expense account if provided (amount is inferred by beancount)
 pub fn commit_transaction(
     directive: &Directive,
-    expense_account: &str,
+    expense_account: Option<&str>,
     payee: Option<&str>,
     narration: Option<&str>,
     journal_path: &Path,
@@ -84,11 +84,13 @@ pub fn commit_transaction(
             txn.narration = Some(new_narration.to_string());
         }
 
-        // Add balancing posting with expense account (no amount - beancount infers it)
-        let account: beancount_parser::Account = expense_account
-            .parse()
-            .with_context(|| format!("Failed to parse account name: '{}'", expense_account))?;
-        txn.postings.push(beancount_parser::Posting::new(account));
+        // Add balancing posting with expense account if provided (no amount - beancount infers it)
+        if let Some(expense_account) = expense_account {
+            let account: beancount_parser::Account = expense_account
+                .parse()
+                .with_context(|| format!("Failed to parse account name: '{}'", expense_account))?;
+            txn.postings.push(beancount_parser::Posting::new(account));
+        }
     }
 
     let does_match = reconcile::matching::journal_matches_staging(&directive, original);

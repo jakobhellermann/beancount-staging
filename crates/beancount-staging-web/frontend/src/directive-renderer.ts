@@ -69,6 +69,12 @@ export class DirectiveRenderer {
       );
     }
 
+    // Check if transaction is already balanced (all postings have amounts AND sum to zero)
+    const isBalanced =
+      txn.postings.length >= 2 &&
+      txn.postings.every((p) => p.amount !== null) &&
+      this.isTransactionBalanced(txn);
+
     // Find if transaction already has an expense posting (posting without amount)
     const expensePosting = txn.postings.find((p) => !p.amount);
     let hasEditableLine = false;
@@ -103,8 +109,10 @@ export class DirectiveRenderer {
       this.container.appendChild(document.createTextNode("\n"));
     }
 
-    // Only add editable expense account line if there wasn't one already
-    if (!hasEditableLine) {
+    // Only add editable expense account line if:
+    // 1. Transaction is not already balanced
+    // 2. There wasn't already an editable posting
+    if (!isBalanced && !hasEditableLine) {
       this.container.appendChild(document.createTextNode("    "));
       const accountText = editState?.account ?? "";
       this.container.appendChild(this.createAccountField(accountText, EDITABLE_SHORTCUTS.account));
@@ -250,5 +258,31 @@ export class DirectiveRenderer {
         e.preventDefault();
       }
     }
+  }
+
+  private isTransactionBalanced(txn: Transaction): boolean {
+    // Group amounts by currency
+    const totalsByCurrency = new Map<string, number>();
+
+    for (const posting of txn.postings) {
+      if (!posting.amount) {
+        return false;
+      }
+
+      const currency = posting.amount.currency;
+      const value = parseFloat(posting.amount.value);
+
+      const current = totalsByCurrency.get(currency) ?? 0;
+      totalsByCurrency.set(currency, current + value);
+    }
+
+    // Check if all currency totals are zero (within floating point precision)
+    for (const total of totalsByCurrency.values()) {
+      if (Math.abs(total) > 0.005) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }

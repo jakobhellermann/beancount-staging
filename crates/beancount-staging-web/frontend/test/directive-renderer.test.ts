@@ -143,8 +143,23 @@ describe("DirectiveRenderer", () => {
       expect(container.textContent).toContain("150.00 USD");
     });
 
-    it("should render editable account field with edit state", () => {
-      const txn = createTransaction();
+    it("should render editable account field with edit state for unbalanced transaction", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank:Checking",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Expenses:FIXME",
+            amount: null,
+            cost: null,
+            price: null,
+          },
+        ],
+      });
       renderer.render(txn, { account: "Expenses:Food" });
 
       const editableFields = container.querySelectorAll('[contenteditable="plaintext-only"]');
@@ -170,8 +185,17 @@ describe("DirectiveRenderer", () => {
       expect(container.textContent).not.toContain("Original");
     });
 
-    it("should create editable fields with data-key attributes", () => {
-      const txn = createTransaction();
+    it("should create editable fields with data-key attributes for unbalanced transaction", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank:Checking",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
       renderer.render(txn);
 
       const payeeField = container.querySelector('[data-key="p"]');
@@ -254,6 +278,60 @@ describe("DirectiveRenderer", () => {
       expect(accountField).toBeTruthy();
       expect(accountField.textContent).toBe("");
     });
+
+    it("should not show editable account field for balanced transactions", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:ZeroSum:Transfers",
+            amount: { value: "-39.99", currency: "EUR" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Assets:Paypal",
+            amount: { value: "39.99", currency: "EUR" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
+      renderer.render(txn);
+
+      // Should not have any editable account field
+      const accountField = container.querySelector('[data-key="a"]');
+      expect(accountField).toBeNull();
+
+      // But should still show the transaction
+      expect(container.textContent).toContain("Assets:ZeroSum:Transfers");
+      expect(container.textContent).toContain("Assets:Paypal");
+      expect(container.textContent).toContain("-39.99");
+      expect(container.textContent).toContain("39.99");
+    });
+
+    it("should show editable account field for unbalanced transaction with all amounts", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Assets:Paypal",
+            amount: { value: "30.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
+      renderer.render(txn);
+
+      // Should have an editable account field since totals don't sum to zero
+      const accountField = container.querySelector('[data-key="a"]');
+      expect(accountField).toBeTruthy();
+    });
   });
 
   describe("editable field interactions", () => {
@@ -280,7 +358,16 @@ describe("DirectiveRenderer", () => {
     });
 
     it("should call onInput when account is edited", () => {
-      const txn = createTransaction();
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank:Checking",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
       renderer.render(txn);
 
       const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
@@ -349,7 +436,16 @@ describe("DirectiveRenderer", () => {
 
   describe("account field autocomplete", () => {
     it("should trigger autocomplete on input", () => {
-      const txn = createTransaction();
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
       renderer.render(txn, { account: "Exp" });
 
       const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
@@ -360,7 +456,16 @@ describe("DirectiveRenderer", () => {
     });
 
     it("should handle Tab for autocomplete navigation", () => {
-      const txn = createTransaction();
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
       renderer.render(txn);
 
       const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
@@ -376,7 +481,16 @@ describe("DirectiveRenderer", () => {
     });
 
     it("should handle ArrowDown for autocomplete", () => {
-      const txn = createTransaction();
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
       renderer.render(txn);
 
       const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
@@ -432,7 +546,16 @@ describe("DirectiveRenderer", () => {
     });
 
     it("should focus account field on 'a' key", () => {
-      const txn = createTransaction();
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
       renderer.render(txn);
 
       const accountField = container.querySelector('[data-key="a"]') as HTMLElement;

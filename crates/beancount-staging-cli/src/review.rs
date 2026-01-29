@@ -150,7 +150,7 @@ fn run_review_loop(
                             let directive = staging_items[current_index];
                             match beancount_staging::commit_transaction(
                                 directive,
-                                expense_account,
+                                Some(expense_account.as_str()),
                                 None, // payee unchanged
                                 None, // narration unchanged
                                 journal_path,
