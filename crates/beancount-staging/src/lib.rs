@@ -41,9 +41,23 @@ pub fn commit_transaction(
     narration: Option<&str>,
     journal_path: &Path,
 ) -> Result<()> {
-    use anyhow::Context;
     use std::fs::OpenOptions;
-    use std::io::Write;
+
+    // Open journal file in append mode
+    let file = BufWriter::new(OpenOptions::new().append(true).open(journal_path)?);
+
+    commit_transaction_to_writer(directive, expense_account, payee, narration, file)
+}
+
+/// Internal function that commits to a writer. Used by both the public API and tests.
+fn commit_transaction_to_writer(
+    directive: &Directive,
+    expense_account: Option<&str>,
+    payee: Option<&str>,
+    narration: Option<&str>,
+    mut writer: impl std::io::Write,
+) -> Result<()> {
+    use anyhow::Context;
 
     let original = directive;
     let mut directive = original.clone();
@@ -99,10 +113,258 @@ pub fn commit_transaction(
         "Internal error: commited transaction does not match original"
     );
 
-    // Open journal file in append mode
-    let mut file = BufWriter::new(OpenOptions::new().append(true).open(journal_path)?);
-
-    writeln!(file, "\n{}", directive)?;
+    writeln!(writer, "\n{}", directive)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_directive(content: &str) -> Directive {
+        let mut directives = Vec::new();
+        for entry in beancount_parser::parse_iter::<Decimal>(content) {
+            if let Entry::Directive(directive) = entry.unwrap() {
+                directives.push(directive);
+            }
+        }
+        assert_eq!(directives.len(), 1, "Expected exactly one directive");
+        directives.into_iter().next().unwrap()
+    }
+
+    fn create_test_transaction(flag: char, payee: &str, narration: &str) -> Directive {
+        let content = format!(
+            r#"2024-01-15 {} "{}" "{}"
+    Assets:Checking  -50.00 USD
+"#,
+            flag, payee, narration
+        );
+        parse_directive(&content)
+    }
+
+    fn create_balanced_transaction(flag: char, payee: &str, narration: &str) -> Directive {
+        let content = format!(
+            r#"2024-01-15 {} "{}" "{}"
+    Assets:Checking  -50.00 USD
+    Assets:Savings    50.00 USD
+"#,
+            flag, payee, narration
+        );
+        parse_directive(&content)
+    }
+
+    #[test]
+    fn test_commit_transaction_basic() {
+        let directive = create_test_transaction('!', "Test Payee", "Test Narration");
+        let mut output = Vec::new();
+
+        commit_transaction_to_writer(
+            &directive,
+            Some("Expenses:Groceries"),
+            None,
+            None,
+            &mut output,
+        )
+        .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "Test Payee" "Test Narration"
+          Assets:Checking	-50.00 USD
+          Expenses:Groceries
+        "#);
+    }
+
+    #[test]
+    fn test_commit_transaction_balanced() {
+        let directive = create_balanced_transaction('!', "Transfer", "Internal transfer");
+        let mut output = Vec::new();
+
+        commit_transaction_to_writer(&directive, None, None, None, &mut output).unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "Transfer" "Internal transfer"
+          Assets:Checking	-50.00 USD
+          Assets:Savings	50.00 USD
+        "#);
+    }
+
+    #[test]
+    fn test_commit_transaction_with_payee_override() {
+        let directive = create_test_transaction('!', "Original Payee", "Test Narration");
+        let mut output = Vec::new();
+
+        commit_transaction_to_writer(
+            &directive,
+            Some("Expenses:Food"),
+            Some("New Payee"),
+            None,
+            &mut output,
+        )
+        .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "New Payee" "Test Narration"
+          Assets:Checking	-50.00 USD
+            source_payee: "Original Payee"
+          Expenses:Food
+        "#);
+    }
+
+    #[test]
+    fn test_commit_transaction_with_narration_override() {
+        let directive = create_test_transaction('!', "Test Payee", "Original Narration");
+        let mut output = Vec::new();
+
+        commit_transaction_to_writer(
+            &directive,
+            Some("Expenses:Food"),
+            None,
+            Some("New Narration"),
+            &mut output,
+        )
+        .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "Test Payee" "New Narration"
+          Assets:Checking	-50.00 USD
+            source_desc: "Original Narration"
+          Expenses:Food
+        "#);
+    }
+
+    #[test]
+    fn test_commit_transaction_with_both_overrides() {
+        let directive = create_test_transaction('!', "Original Payee", "Original Narration");
+        let mut output = Vec::new();
+
+        commit_transaction_to_writer(
+            &directive,
+            Some("Expenses:Food"),
+            Some("New Payee"),
+            Some("New Narration"),
+            &mut output,
+        )
+        .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "New Payee" "New Narration"
+          Assets:Checking	-50.00 USD
+            source_payee: "Original Payee"
+            source_desc: "Original Narration"
+          Expenses:Food
+        "#);
+    }
+
+    #[test]
+    fn test_commit_transaction_no_override_no_metadata() {
+        let directive = create_test_transaction('!', "Test Payee", "Test Narration");
+        let mut output = Vec::new();
+
+        commit_transaction_to_writer(&directive, Some("Expenses:Food"), None, None, &mut output)
+            .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "Test Payee" "Test Narration"
+          Assets:Checking	-50.00 USD
+          Expenses:Food
+        "#);
+    }
+
+    #[test]
+    fn test_commit_transaction_same_payee_no_metadata() {
+        let directive = create_test_transaction('!', "Same Payee", "Test Narration");
+        let mut output = Vec::new();
+
+        commit_transaction_to_writer(
+            &directive,
+            Some("Expenses:Food"),
+            Some("Same Payee"),
+            None,
+            &mut output,
+        )
+        .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "Same Payee" "Test Narration"
+          Assets:Checking	-50.00 USD
+          Expenses:Food
+        "#);
+    }
+
+    #[test]
+    fn test_commit_transaction_invalid_account() {
+        let directive = create_test_transaction('!', "Test Payee", "Test Narration");
+        let mut output = Vec::new();
+
+        let result = commit_transaction_to_writer(
+            &directive,
+            Some("Invalid Account Name!"),
+            None,
+            None,
+            &mut output,
+        );
+
+        assert!(result.is_err());
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Failed to parse account name: 'Invalid Account Name!'");
+    }
+
+    #[test]
+    fn test_commit_transaction_flag_always_changes() {
+        let directive_exclaim = create_test_transaction('!', "Test", "Test");
+        let directive_asterisk = create_test_transaction('*', "Test", "Test");
+        let directive_txn = create_test_transaction('T', "Test", "Test");
+
+        let mut output1 = Vec::new();
+        let mut output2 = Vec::new();
+        let mut output3 = Vec::new();
+
+        commit_transaction_to_writer(
+            &directive_exclaim,
+            Some("Expenses:Food"),
+            None,
+            None,
+            &mut output1,
+        )
+        .unwrap();
+        commit_transaction_to_writer(
+            &directive_asterisk,
+            Some("Expenses:Food"),
+            None,
+            None,
+            &mut output2,
+        )
+        .unwrap();
+        commit_transaction_to_writer(
+            &directive_txn,
+            Some("Expenses:Food"),
+            None,
+            None,
+            &mut output3,
+        )
+        .unwrap();
+
+        let content1 = String::from_utf8(output1).unwrap();
+        let content2 = String::from_utf8(output2).unwrap();
+        let content3 = String::from_utf8(output3).unwrap();
+
+        // All should have * flag
+        assert!(content1.contains("2024-01-15 *"));
+        assert!(content2.contains("2024-01-15 *"));
+        assert!(content3.contains("2024-01-15 *"));
+    }
 }
