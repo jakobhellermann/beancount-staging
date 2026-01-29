@@ -69,9 +69,25 @@ export class DirectiveRenderer {
       );
     }
 
+    // Find if transaction already has an expense posting (posting without amount)
+    const expensePosting = txn.postings.find((p) => !p.amount);
+    let hasEditableLine = false;
+
     // Postings
     for (const posting of txn.postings) {
-      this.container.appendChild(document.createTextNode("    " + posting.account));
+      this.container.appendChild(document.createTextNode("    "));
+
+      // If this is the expense posting without amount, make it editable
+      if (posting === expensePosting) {
+        const accountText = editState?.account ?? posting.account;
+        this.container.appendChild(
+          this.createAccountField(accountText, EDITABLE_SHORTCUTS.account),
+        );
+        hasEditableLine = true;
+      } else {
+        this.container.appendChild(document.createTextNode(posting.account));
+      }
+
       if (posting.amount) {
         this.container.appendChild(document.createTextNode("  "));
         this.container.appendChild(this.createColored(posting.amount.value, "amount"));
@@ -87,11 +103,13 @@ export class DirectiveRenderer {
       this.container.appendChild(document.createTextNode("\n"));
     }
 
-    // Add editable expense account line
-    this.container.appendChild(document.createTextNode("    "));
-    const accountText = editState?.account ?? "";
-    this.container.appendChild(this.createAccountField(accountText, EDITABLE_SHORTCUTS.account));
-    this.container.appendChild(document.createTextNode("\n"));
+    // Only add editable expense account line if there wasn't one already
+    if (!hasEditableLine) {
+      this.container.appendChild(document.createTextNode("    "));
+      const accountText = editState?.account ?? "";
+      this.container.appendChild(this.createAccountField(accountText, EDITABLE_SHORTCUTS.account));
+      this.container.appendChild(document.createTextNode("\n"));
+    }
   }
 
   private createTextField(

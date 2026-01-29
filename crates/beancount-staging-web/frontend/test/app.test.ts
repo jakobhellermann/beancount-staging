@@ -192,6 +192,82 @@ describe("App Integration", () => {
 
       expect(onInput).toHaveBeenCalledWith("account", "Expenses:Food");
     });
+
+    it("should use prefilled expense account from transaction", () => {
+      const container = document.getElementById("transaction")!;
+      const onInput = vi.fn();
+
+      const renderer = new DirectiveRenderer(container, onInput, [], filterAccounts);
+
+      const transaction = {
+        date: "2024-01-15",
+        flag: "!",
+        payee: "TechPay Services Ltd",
+        narration: "Payment",
+        tags: [],
+        links: [],
+        postings: [
+          {
+            account: "Assets:Paypal",
+            amount: { value: "-39.99", currency: "EUR" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Expenses:FIXME",
+            amount: null,
+            cost: null,
+            price: null,
+          },
+        ],
+      };
+
+      renderer.render(transaction);
+
+      // Should have the prefilled account as the editable field
+      const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
+      expect(accountField.textContent).toBe("Expenses:FIXME");
+
+      // Should only have one editable account field
+      const accountFields = container.querySelectorAll('[data-key="a"]');
+      expect(accountFields.length).toBe(1);
+    });
+
+    it("should override prefilled expense account with edit state", () => {
+      const container = document.getElementById("transaction")!;
+      const onInput = vi.fn();
+
+      const renderer = new DirectiveRenderer(container, onInput, [], filterAccounts);
+
+      const transaction = {
+        date: "2024-01-15",
+        flag: "!",
+        payee: "Store",
+        narration: "Purchase",
+        tags: [],
+        links: [],
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Expenses:FIXME",
+            amount: null,
+            cost: null,
+            price: null,
+          },
+        ],
+      };
+
+      renderer.render(transaction, { account: "Expenses:Food" });
+
+      // Should use the edit state value instead of the prefilled one
+      const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
+      expect(accountField.textContent).toBe("Expenses:Food");
+    });
   });
 
   describe("Message display", () => {

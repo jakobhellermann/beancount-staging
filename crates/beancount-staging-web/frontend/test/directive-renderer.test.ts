@@ -183,6 +183,77 @@ describe("DirectiveRenderer", () => {
       const accountField = container.querySelector('[data-key="a"]');
       expect(accountField).toBeTruthy();
     });
+
+    it("should use prefilled expense account when posting without amount exists", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Paypal",
+            amount: { value: "-39.99", currency: "EUR" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Expenses:FIXME",
+            amount: null,
+            cost: null,
+            price: null,
+          },
+        ],
+      });
+      renderer.render(txn);
+
+      // Should render the expense account as editable
+      const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
+      expect(accountField).toBeTruthy();
+      expect(accountField.textContent).toBe("Expenses:FIXME");
+
+      // Should only have one editable account field
+      const editableAccountFields = container.querySelectorAll('[data-key="a"]');
+      expect(editableAccountFields.length).toBe(1);
+    });
+
+    it("should use edit state for prefilled expense account", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-100.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Expenses:FIXME",
+            amount: null,
+            cost: null,
+            price: null,
+          },
+        ],
+      });
+      renderer.render(txn, { account: "Expenses:Food" });
+
+      const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
+      expect(accountField).toBeTruthy();
+      expect(accountField.textContent).toBe("Expenses:Food");
+    });
+
+    it("should show empty account field when no prefilled expense exists", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+      });
+      renderer.render(txn);
+
+      const accountField = container.querySelector('[data-key="a"]') as HTMLElement;
+      expect(accountField).toBeTruthy();
+      expect(accountField.textContent).toBe("");
+    });
   });
 
   describe("editable field interactions", () => {

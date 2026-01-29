@@ -124,8 +124,17 @@ class StagingApp {
 
       // Initialize editState with predicted or default account if not present
       if (!this.editStates.has(currentDirective.id)) {
+        // Check if transaction already has an expense posting (posting without amount)
+        let defaultAccount = data.predicted_account ?? "Expenses:";
+        if (data.transaction.type === "transaction") {
+          const expensePosting = data.transaction.postings.find((p) => !p.amount);
+          if (expensePosting) {
+            defaultAccount = expensePosting.account;
+          }
+        }
+
         this.editStates.set(currentDirective.id, {
-          account: data.predicted_account ?? "Expenses:",
+          account: defaultAccount,
         });
       }
 
