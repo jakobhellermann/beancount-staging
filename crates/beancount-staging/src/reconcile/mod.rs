@@ -201,9 +201,9 @@ fn reconcile_bucket<'a>(
             }
         }
 
-        let match_at = journal
-            .iter()
-            .position(|journal_item| matching::journal_matches_staging(journal_item, staging_item));
+        let match_at = journal.iter().position(|journal_item| {
+            matching::journal_matches_staging(journal_item, staging_item).is_ok()
+        });
         if let Some(match_at) = match_at {
             journal.remove(match_at);
         } else {

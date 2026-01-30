@@ -109,7 +109,7 @@ fn commit_transaction_to_writer(
 
     let does_match = reconcile::matching::journal_matches_staging(&directive, original);
     assert!(
-        does_match,
+        does_match.is_ok(),
         "Internal error: commited transaction does not match original"
     );
 

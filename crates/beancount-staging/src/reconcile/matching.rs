@@ -1,6 +1,22 @@
 use crate::{Directive, DirectiveContent, Transaction};
 
-fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transaction) -> bool {
+/// Reasons why two transactions didn't match
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MismatchReason {
+    DifferentDirectiveType,
+    DifferentPayee { journal: String, staging: String },
+    DifferentNarration { journal: String, staging: String },
+    DifferentAccount { journal: String, staging: String },
+    DifferentAmount,
+    DifferentCost,
+    DifferentPrice,
+    NoPrimaryPosting,
+}
+
+fn journal_matches_staging_transaction(
+    journal: &Transaction,
+    staging: &Transaction,
+) -> Result<(), MismatchReason> {
     // flag can be anything
     // tags can be anything
     // links can be anything
@@ -9,16 +25,26 @@ fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transact
     let (Some(staging_primary), Some(journal_primary)) =
         (staging.postings.first(), journal.postings.first())
     else {
-        return false;
+        return Err(MismatchReason::NoPrimaryPosting);
     };
 
-    let primary_matches = staging_primary.account == journal_primary.account
-        && staging_primary.amount == journal_primary.amount
-        && staging_primary.cost == journal_primary.cost
-        && staging_primary.price == journal_primary.price;
+    if staging_primary.account != journal_primary.account {
+        return Err(MismatchReason::DifferentAccount {
+            journal: journal_primary.account.to_string(),
+            staging: staging_primary.account.to_string(),
+        });
+    }
 
-    if !primary_matches {
-        return false;
+    if staging_primary.amount != journal_primary.amount {
+        return Err(MismatchReason::DifferentAmount);
+    }
+
+    if staging_primary.cost != journal_primary.cost {
+        return Err(MismatchReason::DifferentCost);
+    }
+
+    if staging_primary.price != journal_primary.price {
+        return Err(MismatchReason::DifferentPrice);
     }
 
     // Other postings in staging are allowed to differ or be absent in journal
@@ -58,15 +84,33 @@ fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transact
     let journal_narration = journal_narration.map(normalize_whitespace);
     let staging_narration = staging_narration.map(normalize_whitespace);
 
-    journal_payee == staging_payee && journal_narration == staging_narration
-}
-
-pub fn journal_matches_staging(journal: &Directive, staging: &Directive) -> bool {
-    if std::mem::discriminant(&journal.content) != std::mem::discriminant(&staging.content) {
-        return false;
+    if journal_payee != staging_payee {
+        return Err(MismatchReason::DifferentPayee {
+            journal: journal_payee.unwrap_or("").to_string(),
+            staging: staging_payee.unwrap_or("").to_string(),
+        });
     }
 
-    match (&journal.content, &staging.content) {
+    if journal_narration != staging_narration {
+        return Err(MismatchReason::DifferentNarration {
+            journal: journal_narration.unwrap_or_default(),
+            staging: staging_narration.unwrap_or_default(),
+        });
+    }
+
+    Ok(())
+}
+
+/// Check if journal matches staging, returning a mismatch reason if they don't match
+pub fn journal_matches_staging(
+    journal: &Directive,
+    staging: &Directive,
+) -> Result<(), MismatchReason> {
+    if std::mem::discriminant(&journal.content) != std::mem::discriminant(&staging.content) {
+        return Err(MismatchReason::DifferentDirectiveType);
+    }
+
+    let matches = match (&journal.content, &staging.content) {
         (DirectiveContent::Balance(j), DirectiveContent::Balance(s)) => j == s,
         (DirectiveContent::Close(j), DirectiveContent::Close(s)) => j == s,
         (DirectiveContent::Commodity(j), DirectiveContent::Commodity(s)) => j == s,
@@ -75,11 +119,17 @@ pub fn journal_matches_staging(journal: &Directive, staging: &Directive) -> bool
         (DirectiveContent::Pad(j), DirectiveContent::Pad(s)) => j == s,
         (DirectiveContent::Price(j), DirectiveContent::Price(s)) => j == s,
         (DirectiveContent::Transaction(j), DirectiveContent::Transaction(s)) => {
-            journal_matches_staging_transaction(j, s)
+            return journal_matches_staging_transaction(j, s);
         }
         _ => {
             todo!("Journal: {}\nStaging: {}", journal, staging)
         }
+    };
+
+    if matches {
+        Ok(())
+    } else {
+        Err(MismatchReason::DifferentDirectiveType)
     }
 }
 
@@ -89,6 +139,7 @@ fn normalize_whitespace(s: &str) -> String {
     // Collapse multiple spaces into single space
     let mut result = String::with_capacity(with_spaces.len());
     let mut prev_was_space = false;
+
     for c in with_spaces.chars() {
         if c.is_whitespace() {
             if !prev_was_space {
@@ -100,7 +151,41 @@ fn normalize_whitespace(s: &str) -> String {
             prev_was_space = false;
         }
     }
-    result.trim().to_string()
+
+    result
+}
+
+impl std::fmt::Display for MismatchReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MismatchReason::DifferentDirectiveType => write!(f, "Different directive"),
+            MismatchReason::DifferentPayee { journal, staging } => {
+                write!(
+                    f,
+                    "Different payee: journal=\"{}\" staging=\"{}\"",
+                    journal, staging
+                )
+            }
+            MismatchReason::DifferentNarration { journal, staging } => {
+                write!(
+                    f,
+                    "Different narration: journal=\"{}\" staging=\"{}\"",
+                    journal, staging
+                )
+            }
+            MismatchReason::DifferentAccount { journal, staging } => {
+                write!(
+                    f,
+                    "Different account: journal={} staging={}",
+                    journal, staging
+                )
+            }
+            MismatchReason::DifferentAmount => write!(f, "Different amount"),
+            MismatchReason::DifferentCost => write!(f, "Different cost"),
+            MismatchReason::DifferentPrice => write!(f, "Different price"),
+            MismatchReason::NoPrimaryPosting => write!(f, "No primary posting"),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +225,7 @@ mod tests {
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -159,7 +244,7 @@ mod tests {
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -178,7 +263,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -195,7 +280,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -212,7 +297,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -229,7 +314,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -246,7 +331,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -263,7 +348,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -280,7 +365,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -297,7 +382,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -314,7 +399,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -331,7 +416,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -345,7 +430,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -359,7 +444,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -376,7 +461,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -392,7 +477,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -411,7 +496,7 @@ continued here"
         let staging = parse_single_directive(staging);
 
         // Should match because source_payee matches the staging payee
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -430,7 +515,7 @@ continued here"
         let staging = parse_single_directive(staging);
 
         // Should match because source_desc matches the staging narration
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -450,7 +535,7 @@ continued here"
         let staging = parse_single_directive(staging);
 
         // Should match because both source_payee and source_desc match the staging values
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -470,7 +555,7 @@ continued here"
         let staging = parse_single_directive(staging);
 
         // Should NOT match because staging has edited payee, but journal looks for original
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -490,7 +575,7 @@ continued here"
         let staging = parse_single_directive(staging);
 
         // Should NOT match because staging has edited narration, but journal looks for original
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -509,7 +594,7 @@ continued here"
         let staging = parse_single_directive(staging);
 
         // Should match because there's no metadata, so it uses current values
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -527,7 +612,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -545,7 +630,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -563,7 +648,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -581,7 +666,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -600,7 +685,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     // TODO: relax this
@@ -620,7 +705,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -640,7 +725,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -661,7 +746,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -681,7 +766,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -701,7 +786,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -719,7 +804,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -737,7 +822,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -755,7 +840,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(!journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_err());
     }
 
     #[test]
@@ -775,7 +860,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -795,7 +880,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     // TODO: relax this
@@ -816,7 +901,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        journal_matches_staging(&directive, &staging);
+        let _ = journal_matches_staging(&directive, &staging);
     }
 
     // TODO: relax this
@@ -836,7 +921,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        journal_matches_staging(&directive, &staging);
+        let _ = journal_matches_staging(&directive, &staging);
     }
 
     // TODO: relax this
@@ -857,7 +942,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        journal_matches_staging(&directive, &staging);
+        let _ = journal_matches_staging(&directive, &staging);
     }
 
     // TODO: relax this
@@ -877,7 +962,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        journal_matches_staging(&directive, &staging);
+        let _ = journal_matches_staging(&directive, &staging);
     }
 
     #[test]
@@ -895,7 +980,7 @@ continued here"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 
     #[test]
@@ -914,6 +999,6 @@ extra    spaces    everywhere"
         let directive = parse_single_directive(journal);
         let staging = parse_single_directive(staging);
 
-        assert!(journal_matches_staging(&directive, &staging));
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 }
