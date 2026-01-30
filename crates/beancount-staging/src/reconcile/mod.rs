@@ -2,6 +2,8 @@
 
 pub(crate) mod matching;
 
+pub use matching::MismatchReason;
+
 use crate::Result;
 use crate::utils::sort_merge_diff::{JoinResult, SortMergeDiff};
 use crate::{Decimal, Directive};
@@ -10,7 +12,14 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 #[derive(Debug)]
-pub enum ReconcileItem<'a> {
+pub struct ReconcileItem<'a> {
+    pub item: ReconcileItemKind<'a>,
+    /// For `OnlyInStaging` items, contains reasons why the item didn't match journal items on the same date.
+    pub mismatch_reasons: Vec<(usize, &'a Directive, matching::MismatchReason)>,
+}
+
+#[derive(Debug)]
+pub enum ReconcileItemKind<'a> {
     OnlyInJournal(&'a Directive),
     OnlyInStaging(&'a Directive),
 }
@@ -60,6 +69,9 @@ pub struct ReconcileState {
 }
 impl ReconcileState {
     /// Try to associate all journal and staging items, returning a list of differences.
+    ///
+    /// For items that don't match, also includes debug info about why they didn't match
+    /// journal items on the same date.
     pub fn reconcile(&self) -> Result<Vec<ReconcileItem<'_>>> {
         let journal = group_by_date(&self.journal);
         let staging = group_by_date(&self.staging);
@@ -176,10 +188,16 @@ fn reconcile<'a>(
     ) {
         match bucket {
             JoinResult::OnlyInFirst((_, items)) => {
-                results.extend(items.into_iter().map(ReconcileItem::OnlyInJournal));
+                results.extend(items.into_iter().map(|directive| ReconcileItem {
+                    item: ReconcileItemKind::OnlyInJournal(directive),
+                    mismatch_reasons: Vec::new(),
+                }));
             }
             JoinResult::OnlyInSecond((_, items)) => {
-                results.extend(items.into_iter().map(ReconcileItem::OnlyInStaging));
+                results.extend(items.into_iter().map(|directive| ReconcileItem {
+                    item: ReconcileItemKind::OnlyInStaging(directive),
+                    mismatch_reasons: Vec::new(),
+                }));
             }
             JoinResult::InBoth((_, bucket_journal), (_, bucket_staging)) => {
                 reconcile_bucket(&mut results, bucket_journal, bucket_staging);
@@ -211,10 +229,23 @@ fn reconcile_bucket<'a>(
         if let Some(match_at) = match_at {
             journal.remove(match_at);
         } else {
-            results.push(ReconcileItem::OnlyInStaging(staging_item));
+            // Collect reasons why this staging item didn't match any journal items
+            let mut mismatch_reasons = Vec::new();
+            for (idx, journal_item) in journal.iter().enumerate() {
+                if let Err(reason) = matching::journal_matches_staging(journal_item, staging_item) {
+                    mismatch_reasons.push((idx, *journal_item, reason));
+                }
+            }
+            results.push(ReconcileItem {
+                item: ReconcileItemKind::OnlyInStaging(staging_item),
+                mismatch_reasons,
+            });
         }
     }
-    results.extend(journal.into_iter().map(ReconcileItem::OnlyInJournal));
+    results.extend(journal.into_iter().map(|directive| ReconcileItem {
+        item: ReconcileItemKind::OnlyInJournal(directive),
+        mismatch_reasons: Vec::new(),
+    }));
 }
 
 #[cfg(test)]
@@ -249,11 +280,11 @@ mod tests {
     fn count_results(results: &[ReconcileItem]) -> (usize, usize) {
         let journal_count = results
             .iter()
-            .filter(|item| matches!(item, ReconcileItem::OnlyInJournal(_)))
+            .filter(|item| matches!(item.item, ReconcileItemKind::OnlyInJournal(_)))
             .count();
         let staging_count = results
             .iter()
-            .filter(|item| matches!(item, ReconcileItem::OnlyInStaging(_)))
+            .filter(|item| matches!(item.item, ReconcileItemKind::OnlyInStaging(_)))
             .count();
         (journal_count, staging_count)
     }
@@ -261,12 +292,12 @@ mod tests {
     fn format_results(results: &[ReconcileItem]) -> String {
         let mut output = String::new();
         for item in results {
-            match item {
-                ReconcileItem::OnlyInJournal(directive) => {
+            match &item.item {
+                ReconcileItemKind::OnlyInJournal(directive) => {
                     output.push_str("; OnlyInJournal\n");
                     output.push_str(&directive.to_string());
                 }
-                ReconcileItem::OnlyInStaging(directive) => {
+                ReconcileItemKind::OnlyInStaging(directive) => {
                     output.push_str("; OnlyInStaging\n");
                     output.push_str(&directive.to_string());
                 }

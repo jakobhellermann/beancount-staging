@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use beancount_staging::{
     Directive,
-    reconcile::{ReconcileConfig, ReconcileItem, StagingSource},
+    reconcile::{ReconcileConfig, ReconcileItemKind, StagingSource},
 };
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::time::Duration;
@@ -15,8 +15,8 @@ pub fn review_interactive(journal: Vec<PathBuf>, staging_source: StagingSource) 
     // Filter only staging items
     let staging_items: Vec<_> = results
         .iter()
-        .filter_map(|item| match *item {
-            ReconcileItem::OnlyInStaging(directive) => Some(directive),
+        .filter_map(|item| match item.item {
+            ReconcileItemKind::OnlyInStaging(directive) => Some(directive),
             _ => None,
         })
         .collect();

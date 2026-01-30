@@ -53,7 +53,11 @@ enum Commands {
         socket: Option<PathBuf>,
     },
     /// Show differences between journal and staging files and exit
-    Diff,
+    Diff {
+        /// Show detailed debug information about why transactions didn't match
+        #[arg(long)]
+        debug: bool,
+    },
     // /// Interactively review and stage transactions in the terminal
     // Cli,
 }
@@ -130,7 +134,7 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
         socket: None,
     });
     match command {
-        Commands::Diff => show::show_diff(journal_paths, staging_source),
+        Commands::Diff { debug } => show::show_diff(journal_paths, staging_source, debug),
         Commands::Serve { port, socket } => {
             let listener = if let Some(socket_path) = socket {
                 beancount_staging_web::ListenerType::UnixSocket(socket_path)

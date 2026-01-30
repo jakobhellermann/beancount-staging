@@ -1,5 +1,7 @@
 use beancount_parser::Account;
-use beancount_staging::reconcile::{ReconcileConfig, ReconcileItem, ReconcileState, StagingSource};
+use beancount_staging::reconcile::{
+    ReconcileConfig, ReconcileItemKind, ReconcileState, StagingSource,
+};
 use beancount_staging::{Directive, DirectiveContent};
 use beancount_staging_predictor::preprocessing::Alpha;
 use beancount_staging_predictor::{DecisionTreePredictor, PredictionInput, Predictor};
@@ -141,7 +143,7 @@ impl AppStateInner {
         let mut id_gen = UniqueIdGenerator::new();
 
         for item in &results {
-            if let ReconcileItem::OnlyInStaging(directive) = item {
+            if let ReconcileItemKind::OnlyInStaging(directive) = item.item {
                 let unique_id = id_gen.generate_id(directive);
                 staging_items.insert(unique_id, (*directive).clone());
             }
