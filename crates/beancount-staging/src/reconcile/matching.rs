@@ -54,6 +54,10 @@ fn journal_matches_staging_transaction(journal: &Transaction, staging: &Transact
     let journal_narration = journal_narration.filter(|s| !s.is_empty());
     let staging_narration = staging.narration.as_deref().filter(|s| !s.is_empty());
 
+    // Normalize newlines for narration comparison
+    let journal_narration = journal_narration.map(normalize_whitespace);
+    let staging_narration = staging_narration.map(normalize_whitespace);
+
     journal_payee == staging_payee && journal_narration == staging_narration
 }
 
@@ -77,6 +81,26 @@ pub fn journal_matches_staging(journal: &Directive, staging: &Directive) -> bool
             todo!("Journal: {}\nStaging: {}", journal, staging)
         }
     }
+}
+
+/// Normalize a string by replacing newlines with spaces and collapsing multiple spaces
+fn normalize_whitespace(s: &str) -> String {
+    let with_spaces = s.replace('\n', " ");
+    // Collapse multiple spaces into single space
+    let mut result = String::with_capacity(with_spaces.len());
+    let mut prev_was_space = false;
+    for c in with_spaces.chars() {
+        if c.is_whitespace() {
+            if !prev_was_space {
+                result.push(' ');
+                prev_was_space = true;
+            }
+        } else {
+            result.push(c);
+            prev_was_space = false;
+        }
+    }
+    result.trim().to_string()
 }
 
 #[cfg(test)]
@@ -854,5 +878,42 @@ continued here"
         let staging = parse_single_directive(staging);
 
         journal_matches_staging(&directive, &staging);
+    }
+
+    #[test]
+    fn match_ignores_extra_whitespace_in_narration() {
+        // Journal has lots of extra spaces, staging has single spaces
+        let journal = r#"
+2025-12-01 * "payee" "narration with     many       extra    spaces"
+    Assets:Account  -99.00 EUR
+    Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 * "payee" "narration with many extra spaces"
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
+    }
+
+    #[test]
+    fn match_ignores_newlines_and_extra_whitespace() {
+        // Journal has newlines with extra spaces, staging has compact version
+        let journal = r#"
+2025-12-01 * "payee" "narration with     many
+extra    spaces    everywhere"
+    Assets:Account  -99.00 EUR
+    Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 * "payee" "narration with many extra spaces everywhere"
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging));
     }
 }
