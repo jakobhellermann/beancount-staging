@@ -152,6 +152,7 @@ fn normalize_whitespace(s: &str) -> String {
         }
     }
 
+    result.truncate(result.trim_end().len());
     result
 }
 
@@ -994,6 +995,24 @@ extra    spaces    everywhere"
 "#;
         let staging = r#"
 2025-12-01 * "payee" "narration with many extra spaces everywhere"
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
+    }
+
+    #[test]
+    fn match_ignores_trailing_whitespace_in_narration() {
+        // Journal has trailing whitespace after narration
+        let journal = r#"
+2025-12-01 * "payee" "narration with trailing spaces   "
+    Assets:Account  -99.00 EUR
+    Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 * "payee" "narration with trailing spaces"
     Assets:Account  -99.00 EUR
 "#;
         let directive = parse_single_directive(journal);
