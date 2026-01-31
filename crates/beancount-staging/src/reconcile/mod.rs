@@ -681,4 +681,39 @@ mod tests {
         2025-01-01 balance Assets:Checking 1000.00 EUR
         ");
     }
+
+    #[test]
+    fn reconcile_four_identical_transactions_one_committed() {
+        // Scenario: User has 4 identical transactions on the same day in staging.
+        // They commit the first one to the journal. Now journal has 1 and staging has 4.
+        // The reconciler should match the 1 journal transaction with 1 of the 4 staging
+        // transactions, leaving 3 staging transactions unmatched.
+        let journal = r#"
+2025-01-01 * "Coffee Shop" "Morning coffee"
+    Assets:Checking  -5.00 EUR
+    Expenses:Food    5.00 EUR
+"#;
+        let staging = r#"
+2025-01-01 ! "Coffee Shop" "Morning coffee"
+    Assets:Checking  -5.00 EUR
+
+2025-01-01 ! "Coffee Shop" "Morning coffee"
+    Assets:Checking  -5.00 EUR
+
+2025-01-01 ! "Coffee Shop" "Morning coffee"
+    Assets:Checking  -5.00 EUR
+
+2025-01-01 ! "Coffee Shop" "Morning coffee"
+    Assets:Checking  -5.00 EUR
+"#;
+        let journal_directives = build_directives(journal);
+        let staging_directives = build_directives(staging);
+        let journal_map = build_date_map(&journal_directives);
+        let staging_map = build_date_map(&staging_directives);
+        let results = reconcile(journal_map, staging_map);
+
+        // Expected: 0 in journal only, 3 in staging only
+        // (1 staging matched with 1 journal, leaving 3 staging unmatched)
+        assert_eq!(count_results(&results), (0, 3));
+    }
 }

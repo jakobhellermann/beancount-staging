@@ -14,7 +14,7 @@ use std::convert::Infallible;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::state::{AppState, generate_directive_id};
+use crate::state::AppState;
 use beancount_staging::Directive;
 
 /// Check if a transaction is balanced (all postings have amounts and sum to zero per currency)
@@ -45,10 +45,8 @@ fn is_transaction_balanced(txn: &beancount_staging::Transaction) -> bool {
         .all(|total| total.abs() <= tolerance)
 }
 
-fn serialize_directive(directive: &Directive) -> SerializedDirective {
+fn serialize_directive(id: &str, directive: &Directive) -> SerializedDirective {
     use beancount_parser::DirectiveContent;
-
-    let id = generate_directive_id(directive);
 
     let content = match &directive.content {
         DirectiveContent::Transaction(txn) => {
@@ -98,7 +96,10 @@ fn serialize_directive(directive: &Directive) -> SerializedDirective {
         ),
     };
 
-    SerializedDirective { id, content }
+    SerializedDirective {
+        id: id.to_string(),
+        content,
+    }
 }
 
 #[derive(Serialize)]
@@ -191,8 +192,8 @@ pub async fn init_handler(State(state): State<AppState>) -> Result<Json<InitResp
     // BTreeMap already maintains sorted order by key (date-hash)
     let items: Vec<SerializedDirective> = inner
         .staging_items
-        .values()
-        .map(serialize_directive)
+        .iter()
+        .map(|(id, directive)| serialize_directive(id, directive))
         .collect();
 
     tracing::info!("Sending {} staging items", items.len());
@@ -214,7 +215,7 @@ pub async fn get_transaction(
     let predicted_account = inner.predict(directive);
 
     Ok(Json(TransactionResponse {
-        transaction: serialize_directive(directive),
+        transaction: serialize_directive(&id, directive),
         predicted_account: predicted_account.map(|account| account.to_string()),
     }))
 }
