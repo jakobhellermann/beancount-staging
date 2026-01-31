@@ -1,8 +1,11 @@
 [package]
 name = "beancount-staging-web"
-version.workspace = true
+authors.workspace = true
 edition.workspace = true
+license.workspace = true
 repository.workspace = true
+version.workspace = true
+description = "Web frontend/server for beancount-staging"
 
 [dependencies]
 beancount-staging = { path = "../beancount-staging" }

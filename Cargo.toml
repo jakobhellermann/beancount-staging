@@ -7,6 +7,11 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/jakobhellermann/beancount-staging"
+authors = ["Jakob Hellermann <jakob.hellermann@protonmail.com>"]
+license = "GPL-2.0"
+categories = ["finance"]
+keywords = ["beancount", "import", "automate"]
+description = "A tool for interactively reviewing and accepting automated beancount transactions"
 
 [workspace.dependencies]
 anyhow = "1.0"
