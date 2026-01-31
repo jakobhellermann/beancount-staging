@@ -258,6 +258,7 @@ pub async fn commit_transaction(
         payload.account.as_deref(),
         payload.payee.as_deref(),
         payload.narration.as_deref(),
+        beancount_staging::SourceMetaTarget::Transaction,
         journal_path,
     )
     .map_err(|e| {

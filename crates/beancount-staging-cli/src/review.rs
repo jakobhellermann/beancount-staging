@@ -153,6 +153,7 @@ fn run_review_loop(
                                 Some(expense_account.as_str()),
                                 None, // payee unchanged
                                 None, // narration unchanged
+                                beancount_staging::SourceMetaTarget::Transaction,
                                 journal_path,
                             ) {
                                 Ok(()) => {

@@ -16,6 +16,7 @@ pub enum MismatchReason {
 fn journal_matches_staging_transaction(
     journal: &Transaction,
     staging: &Transaction,
+    journal_directive: &Directive,
 ) -> Result<(), MismatchReason> {
     // flag can be anything
     // tags can be anything
@@ -63,15 +64,30 @@ fn journal_matches_staging_transaction(
     }
 
     let first_posting = journal.postings.first().expect("TODO: no accounts?");
-    let meta = &first_posting.metadata;
 
-    let journal_payee = meta
+    // Check directive metadata first (new location), then posting metadata (old location), then transaction field
+    let journal_payee = journal_directive
+        .metadata
         .get("source_payee")
         .and_then(|x| x.as_string())
+        .or_else(|| {
+            first_posting
+                .metadata
+                .get("source_payee")
+                .and_then(|x| x.as_string())
+        })
         .or(journal.payee.as_deref());
-    let journal_narration = meta
+
+    let journal_narration = journal_directive
+        .metadata
         .get("source_desc")
         .and_then(|x| x.as_string())
+        .or_else(|| {
+            first_posting
+                .metadata
+                .get("source_desc")
+                .and_then(|x| x.as_string())
+        })
         .or(journal.narration.as_deref());
 
     // Normalize empty strings to None for comparison
@@ -119,7 +135,7 @@ pub fn journal_matches_staging(
         (DirectiveContent::Pad(j), DirectiveContent::Pad(s)) => j == s,
         (DirectiveContent::Price(j), DirectiveContent::Price(s)) => j == s,
         (DirectiveContent::Transaction(j), DirectiveContent::Transaction(s)) => {
-            return journal_matches_staging_transaction(j, s);
+            return journal_matches_staging_transaction(j, s, journal);
         }
         _ => {
             todo!("Journal: {}\nStaging: {}", journal, staging)
@@ -485,9 +501,9 @@ continued here"
     fn match_with_source_payee_metadata() {
         let journal = r#"
 2025-12-01 * "Updated Payee" "narration"
-    Assets:Account  -99.00 EUR
-        source_payee: "Original Payee"
-    Expenses:Food   99.00 EUR
+  source_payee: "Original Payee"
+  Assets:Account  -99.00 EUR
+  Expenses:Food   99.00 EUR
 "#;
         let staging = r#"
 2025-12-01 ! "Original Payee" "narration"
@@ -504,9 +520,9 @@ continued here"
     fn match_with_source_desc_metadata() {
         let journal = r#"
 2025-12-01 * "payee" "Updated Description"
-    Assets:Account  -99.00 EUR
-        source_desc: "Original Description"
-    Expenses:Food   99.00 EUR
+  source_desc: "Original Description"
+  Assets:Account  -99.00 EUR
+  Expenses:Food   99.00 EUR
 "#;
         let staging = r#"
 2025-12-01 ! "payee" "Original Description"
@@ -523,10 +539,10 @@ continued here"
     fn match_with_both_source_metadata_fields() {
         let journal = r#"
 2025-12-01 * "Updated Payee" "Updated Description"
-    Assets:Account  -99.00 EUR
-        source_payee: "Original Payee"
-        source_desc: "Original Description"
-    Expenses:Food   99.00 EUR
+  source_payee: "Original Payee"
+  source_desc: "Original Description"
+  Assets:Account  -99.00 EUR
+  Expenses:Food   99.00 EUR
 "#;
         let staging = r#"
 2025-12-01 ! "Original Payee" "Original Description"
@@ -544,9 +560,9 @@ continued here"
         // When payee is edited, staging with the NEW payee should NOT match (only original matches)
         let journal = r#"
 2025-12-01 * "Edited Payee" "narration"
-    Assets:Account  -99.00 EUR
-        source_payee: "Original Payee"
-    Expenses:Food   99.00 EUR
+  source_payee: "Original Payee"
+  Assets:Account  -99.00 EUR
+  Expenses:Food   99.00 EUR
 "#;
         let staging = r#"
 2025-12-01 ! "Edited Payee" "narration"
@@ -564,9 +580,9 @@ continued here"
         // When narration is edited, staging with the NEW narration should NOT match (only original matches)
         let journal = r#"
 2025-12-01 * "payee" "Edited Narration"
-    Assets:Account  -99.00 EUR
-        source_desc: "Original Narration"
-    Expenses:Food   99.00 EUR
+  source_desc: "Original Narration"
+  Assets:Account  -99.00 EUR
+  Expenses:Food   99.00 EUR
 "#;
         let staging = r#"
 2025-12-01 ! "payee" "Edited Narration"
@@ -595,6 +611,48 @@ continued here"
         let staging = parse_single_directive(staging);
 
         // Should match because there's no metadata, so it uses current values
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
+    }
+
+    #[test]
+    fn match_with_posting_level_metadata_for_backward_compatibility() {
+        // Old format: metadata on posting level should still work
+        let journal = r#"
+2025-12-01 * "Updated Payee" "Updated Description"
+    Assets:Account  -99.00 EUR
+        source_payee: "Original Payee"
+        source_desc: "Original Description"
+    Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 ! "Original Payee" "Original Description"
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        // Should match because backward compatibility fallback to posting metadata
+        assert!(journal_matches_staging(&directive, &staging).is_ok());
+    }
+
+    #[test]
+    fn transaction_metadata_takes_priority_over_posting_metadata() {
+        // Transaction metadata should take priority when both exist
+        let journal = r#"
+2025-12-01 * "Wrong Payee" "narration"
+  source_payee: "Correct Payee"
+  Assets:Account  -99.00 EUR
+    source_payee: "Incorrect Payee"
+  Expenses:Food   99.00 EUR
+"#;
+        let staging = r#"
+2025-12-01 ! "Correct Payee" "narration"
+    Assets:Account  -99.00 EUR
+"#;
+        let directive = parse_single_directive(journal);
+        let staging = parse_single_directive(staging);
+
+        // Should match because transaction-level metadata takes priority
         assert!(journal_matches_staging(&directive, &staging).is_ok());
     }
 

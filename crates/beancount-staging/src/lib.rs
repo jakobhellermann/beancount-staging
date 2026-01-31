@@ -8,6 +8,15 @@ pub type DirectiveContent = beancount_parser::DirectiveContent<Decimal>;
 pub type Transaction = beancount_parser::Transaction<Decimal>;
 pub type Decimal = rust_decimal::Decimal;
 
+/// Specifies where to store source metadata (source_desc, source_payee)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceMetaTarget {
+    /// Store in transaction-level metadata (directive.metadata)
+    Transaction,
+    /// Store in first posting's metadata (for backward compatibility)
+    Posting,
+}
+
 pub use anyhow::Result;
 use beancount_parser::metadata::Value;
 
@@ -39,6 +48,7 @@ pub fn commit_transaction(
     expense_account: Option<&str>,
     payee: Option<&str>,
     narration: Option<&str>,
+    source_meta_target: SourceMetaTarget,
     journal_path: &Path,
 ) -> Result<()> {
     use std::fs::OpenOptions;
@@ -46,7 +56,14 @@ pub fn commit_transaction(
     // Open journal file in append mode
     let file = BufWriter::new(OpenOptions::new().append(true).open(journal_path)?);
 
-    commit_transaction_to_writer(directive, expense_account, payee, narration, file)
+    commit_transaction_to_writer(
+        directive,
+        expense_account,
+        payee,
+        narration,
+        source_meta_target,
+        file,
+    )
 }
 
 /// Internal function that commits to a writer. Used by both the public API and tests.
@@ -55,6 +72,7 @@ fn commit_transaction_to_writer(
     expense_account: Option<&str>,
     payee: Option<&str>,
     narration: Option<&str>,
+    source_meta_target: SourceMetaTarget,
     mut writer: impl std::io::Write,
 ) -> Result<()> {
     use anyhow::Context;
@@ -66,13 +84,19 @@ fn commit_transaction_to_writer(
         // Change flag from ! to *
         txn.flag = Some('*');
 
-        let meta = &mut txn
-            .postings
-            .first_mut()
-            .expect("TODO: no first account")
-            .metadata;
+        // Select metadata target based on configuration
+        let meta = match source_meta_target {
+            SourceMetaTarget::Transaction => &mut directive.metadata,
+            SourceMetaTarget::Posting => {
+                &mut txn
+                    .postings
+                    .first_mut()
+                    .expect("TODO: no first account")
+                    .metadata
+            }
+        };
 
-        // Update payee if provided, saving original as metadata on first posting
+        // Update payee if provided, saving original as metadata
         if let Some(new_payee) = payee {
             if let Some(original_payee) = &txn.payee
                 && original_payee != new_payee
@@ -85,7 +109,7 @@ fn commit_transaction_to_writer(
             txn.payee = Some(new_payee.to_string());
         }
 
-        // Update narration if provided, saving original as metadata on first posting
+        // Update narration if provided, saving original as metadata
         if let Some(new_narration) = narration {
             if let Some(original_narration) = &txn.narration
                 && original_narration != new_narration
@@ -164,6 +188,7 @@ mod tests {
             Some("Expenses:Groceries"),
             None,
             None,
+            SourceMetaTarget::Transaction,
             &mut output,
         )
         .unwrap();
@@ -182,7 +207,15 @@ mod tests {
         let directive = create_balanced_transaction('!', "Transfer", "Internal transfer");
         let mut output = Vec::new();
 
-        commit_transaction_to_writer(&directive, None, None, None, &mut output).unwrap();
+        commit_transaction_to_writer(
+            &directive,
+            None,
+            None,
+            None,
+            SourceMetaTarget::Transaction,
+            &mut output,
+        )
+        .unwrap();
 
         let content = String::from_utf8(output).unwrap();
         insta::assert_snapshot!(content, @r#"
@@ -203,6 +236,7 @@ mod tests {
             Some("Expenses:Food"),
             Some("New Payee"),
             None,
+            SourceMetaTarget::Transaction,
             &mut output,
         )
         .unwrap();
@@ -212,8 +246,8 @@ mod tests {
 
         2024-01-15 * "New Payee" "Test Narration"
           Assets:Checking	-50.00 USD
-            source_payee: "Original Payee"
           Expenses:Food
+          source_payee: "Original Payee"
         "#);
     }
 
@@ -227,6 +261,7 @@ mod tests {
             Some("Expenses:Food"),
             None,
             Some("New Narration"),
+            SourceMetaTarget::Transaction,
             &mut output,
         )
         .unwrap();
@@ -236,8 +271,8 @@ mod tests {
 
         2024-01-15 * "Test Payee" "New Narration"
           Assets:Checking	-50.00 USD
-            source_desc: "Original Narration"
           Expenses:Food
+          source_desc: "Original Narration"
         "#);
     }
 
@@ -251,6 +286,7 @@ mod tests {
             Some("Expenses:Food"),
             Some("New Payee"),
             Some("New Narration"),
+            SourceMetaTarget::Transaction,
             &mut output,
         )
         .unwrap();
@@ -260,9 +296,9 @@ mod tests {
 
         2024-01-15 * "New Payee" "New Narration"
           Assets:Checking	-50.00 USD
-            source_payee: "Original Payee"
-            source_desc: "Original Narration"
           Expenses:Food
+          source_payee: "Original Payee"
+          source_desc: "Original Narration"
         "#);
     }
 
@@ -271,8 +307,15 @@ mod tests {
         let directive = create_test_transaction('!', "Test Payee", "Test Narration");
         let mut output = Vec::new();
 
-        commit_transaction_to_writer(&directive, Some("Expenses:Food"), None, None, &mut output)
-            .unwrap();
+        commit_transaction_to_writer(
+            &directive,
+            Some("Expenses:Food"),
+            None,
+            None,
+            SourceMetaTarget::Transaction,
+            &mut output,
+        )
+        .unwrap();
 
         let content = String::from_utf8(output).unwrap();
         insta::assert_snapshot!(content, @r#"
@@ -293,6 +336,7 @@ mod tests {
             Some("Expenses:Food"),
             Some("Same Payee"),
             None,
+            SourceMetaTarget::Transaction,
             &mut output,
         )
         .unwrap();
@@ -316,6 +360,7 @@ mod tests {
             Some("Invalid Account Name!"),
             None,
             None,
+            SourceMetaTarget::Transaction,
             &mut output,
         );
 
@@ -338,6 +383,7 @@ mod tests {
             Some("Expenses:Food"),
             None,
             None,
+            SourceMetaTarget::Transaction,
             &mut output1,
         )
         .unwrap();
@@ -346,6 +392,7 @@ mod tests {
             Some("Expenses:Food"),
             None,
             None,
+            SourceMetaTarget::Transaction,
             &mut output2,
         )
         .unwrap();
@@ -354,6 +401,7 @@ mod tests {
             Some("Expenses:Food"),
             None,
             None,
+            SourceMetaTarget::Transaction,
             &mut output3,
         )
         .unwrap();
