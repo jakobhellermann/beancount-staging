@@ -127,7 +127,8 @@ fn commit_transaction_to_writer(
             let account: beancount_parser::Account = expense_account
                 .parse()
                 .with_context(|| format!("Failed to parse account name: '{}'", expense_account))?;
-            txn.postings.push(beancount_parser::Posting::new(account));
+            txn.postings
+                .push(beancount_parser::Posting::from_account(account));
         }
     }
 
@@ -197,7 +198,7 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "Test Payee" "Test Narration"
-          Assets:Checking	-50.00 USD
+          Assets:Checking -50.00 USD
           Expenses:Groceries
         "#);
     }
@@ -221,8 +222,8 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "Transfer" "Internal transfer"
-          Assets:Checking	-50.00 USD
-          Assets:Savings	50.00 USD
+          Assets:Checking -50.00 USD
+          Assets:Savings 50.00 USD
         "#);
     }
 
@@ -245,7 +246,7 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "New Payee" "Test Narration"
-          Assets:Checking	-50.00 USD
+          Assets:Checking -50.00 USD
           Expenses:Food
           source_payee: "Original Payee"
         "#);
@@ -270,7 +271,7 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "Test Payee" "New Narration"
-          Assets:Checking	-50.00 USD
+          Assets:Checking -50.00 USD
           Expenses:Food
           source_desc: "Original Narration"
         "#);
@@ -295,7 +296,7 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "New Payee" "New Narration"
-          Assets:Checking	-50.00 USD
+          Assets:Checking -50.00 USD
           Expenses:Food
           source_payee: "Original Payee"
           source_desc: "Original Narration"
@@ -321,7 +322,7 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "Test Payee" "Test Narration"
-          Assets:Checking	-50.00 USD
+          Assets:Checking -50.00 USD
           Expenses:Food
         "#);
     }
@@ -345,7 +346,7 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "Same Payee" "Test Narration"
-          Assets:Checking	-50.00 USD
+          Assets:Checking -50.00 USD
           Expenses:Food
         "#);
     }

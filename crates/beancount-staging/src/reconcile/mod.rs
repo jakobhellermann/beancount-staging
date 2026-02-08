@@ -333,16 +333,16 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInJournal
         2025-01-01 * "Payee1" "Transaction 1"
-          Assets:Checking	-100.00 EUR
-          Expenses:Food	100.00 EUR
+          Assets:Checking -100.00 EUR
+          Expenses:Food 100.00 EUR
         ; OnlyInJournal
         2025-01-02 * "Payee2" "Transaction 2"
-          Assets:Checking	-50.00 EUR
-          Expenses:Transport	50.00 EUR
+          Assets:Checking -50.00 EUR
+          Expenses:Transport 50.00 EUR
         ; OnlyInJournal
         2025-01-03 * "Payee3" "Transaction 3"
-          Assets:Checking	-75.00 EUR
-          Expenses:Shopping	75.00 EUR
+          Assets:Checking -75.00 EUR
+          Expenses:Shopping 75.00 EUR
         "#);
     }
 
@@ -367,13 +367,13 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInStaging
         2025-01-01 * "Payee1" "Transaction 1"
-          Assets:Checking	-100.00 EUR
+          Assets:Checking -100.00 EUR
         ; OnlyInStaging
         2025-01-02 * "Payee2" "Transaction 2"
-          Assets:Checking	-50.00 EUR
+          Assets:Checking -50.00 EUR
         ; OnlyInStaging
         2025-01-03 * "Payee3" "Transaction 3"
-          Assets:Checking	-75.00 EUR
+          Assets:Checking -75.00 EUR
         "#);
     }
 
@@ -405,11 +405,11 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInJournal
         2025-01-02 * "Payee2" "Transaction B"
-          Assets:Checking	-50.00 EUR
-          Expenses:Transport	50.00 EUR
+          Assets:Checking -50.00 EUR
+          Expenses:Transport 50.00 EUR
         ; OnlyInStaging
         2025-01-03 * "Payee3" "Transaction C"
-          Assets:Checking	-75.00 EUR
+          Assets:Checking -75.00 EUR
         "#);
     }
 
@@ -445,8 +445,8 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInJournal
         2025-01-01 * "Payee3" "Transaction 3"
-          Assets:Checking	-75.00 EUR
-          Expenses:Shopping	75.00 EUR
+          Assets:Checking -75.00 EUR
+          Expenses:Shopping 75.00 EUR
         "#);
     }
 
@@ -473,11 +473,11 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInJournal
         2025-01-01 * "Payee1" "Transaction on Jan 1"
-          Assets:Checking	-100.00 EUR
-          Expenses:Food	100.00 EUR
+          Assets:Checking -100.00 EUR
+          Expenses:Food 100.00 EUR
         ; OnlyInStaging
         2025-01-02 * "Payee2" "Transaction on Jan 2"
-          Assets:Checking	-50.00 EUR
+          Assets:Checking -50.00 EUR
         "#);
     }
 
@@ -551,25 +551,25 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInStaging
         2025-01-01 * "PayeeC" "Transaction C"
-          Assets:Savings	-125.00 EUR
+          Assets:Savings -125.00 EUR
         ; OnlyInStaging
         2025-01-01 * "PayeeB" "Transaction B"
-          Assets:Savings	-150.00 EUR
+          Assets:Savings -150.00 EUR
         ; OnlyInStaging
         2025-01-01 * "PayeeA" "Transaction A"
-          Assets:Savings	-200.00 EUR
+          Assets:Savings -200.00 EUR
         ; OnlyInJournal
         2025-01-01 * "Payee1" "Transaction 1"
-          Assets:Checking	-100.00 EUR
-          Expenses:Food	100.00 EUR
+          Assets:Checking -100.00 EUR
+          Expenses:Food 100.00 EUR
         ; OnlyInJournal
         2025-01-01 * "Payee2" "Transaction 2"
-          Assets:Checking	-50.00 EUR
-          Expenses:Transport	50.00 EUR
+          Assets:Checking -50.00 EUR
+          Expenses:Transport 50.00 EUR
         ; OnlyInJournal
         2025-01-01 * "Payee3" "Transaction 3"
-          Assets:Checking	-75.00 EUR
-          Expenses:Shopping	75.00 EUR
+          Assets:Checking -75.00 EUR
+          Expenses:Shopping 75.00 EUR
         "#);
     }
 
@@ -602,10 +602,10 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInStaging
         2025-01-01 * "Payee3" "Transaction 3"
-          Assets:Checking	-75.00 EUR
+          Assets:Checking -75.00 EUR
         ; OnlyInStaging
         2025-01-01 * "Payee2" "Transaction 2"
-          Assets:Checking	-50.00 EUR
+          Assets:Checking -50.00 EUR
         "#);
     }
 
@@ -638,12 +638,12 @@ mod tests {
         insta::assert_snapshot!(format_results(&results), @r#"
         ; OnlyInJournal
         2025-01-01 * "Payee2" "Transaction 2"
-          Assets:Checking	-50.00 EUR
-          Expenses:Transport	50.00 EUR
+          Assets:Checking -50.00 EUR
+          Expenses:Transport 50.00 EUR
         ; OnlyInJournal
         2025-01-01 * "Payee3" "Transaction 3"
-          Assets:Checking	-75.00 EUR
-          Expenses:Shopping	75.00 EUR
+          Assets:Checking -75.00 EUR
+          Expenses:Shopping 75.00 EUR
         "#);
     }
 
