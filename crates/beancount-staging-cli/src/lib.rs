@@ -57,6 +57,10 @@ enum Commands {
         /// Show detailed debug information about why transactions didn't match
         #[arg(long)]
         debug: bool,
+
+        /// Include transactions that only exist in journal (not in staging)
+        #[arg(long)]
+        include_only_journal: bool,
     },
     // /// Interactively review and stage transactions in the terminal
     // Cli,
@@ -134,7 +138,10 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
         socket: None,
     });
     match command {
-        Commands::Diff { debug } => show::show_diff(journal_paths, staging_source, debug),
+        Commands::Diff {
+            debug,
+            include_only_journal,
+        } => show::show_diff(journal_paths, staging_source, debug, include_only_journal),
         Commands::Serve { port, socket } => {
             let listener = if let Some(socket_path) = socket {
                 beancount_staging_web::ListenerType::UnixSocket(socket_path)

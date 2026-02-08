@@ -7,7 +7,12 @@ use beancount_staging::reconcile::{
     MismatchReason, ReconcileConfig, ReconcileItemKind, StagingSource,
 };
 
-pub fn show_diff(journal: Vec<PathBuf>, staging_source: StagingSource, debug: bool) -> Result<()> {
+pub fn show_diff(
+    journal: Vec<PathBuf>,
+    staging_source: StagingSource,
+    debug: bool,
+    include_only_journal: bool,
+) -> Result<()> {
     let config = ReconcileConfig::new(journal, staging_source);
     let state = config.read()?;
     let results = state.reconcile()?;
@@ -30,6 +35,12 @@ pub fn show_diff(journal: Vec<PathBuf>, staging_source: StagingSource, debug: bo
                     continue;
                 }
                 journal_count += 1;
+
+                if include_only_journal {
+                    println!("{journal_style}━━━ Only in Journal ━━━{journal_style:#}");
+                    println!("{}", directive);
+                    println!();
+                }
             }
             ReconcileItemKind::OnlyInStaging(directive) => {
                 println!("{staging_style}━━━ Only in Staging (needs review) ━━━{staging_style:#}");
