@@ -11,6 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::broadcast;
 
+use crate::watcher::FileWatcher;
+
 /// Generates unique IDs for directives, handling collisions by adding counter suffixes
 struct UniqueIdGenerator {
     id_counters: HashMap<String, usize>,
@@ -102,6 +104,9 @@ pub struct FileChangeEvent;
 pub struct AppState {
     pub inner: Arc<Mutex<AppStateInner>>,
     pub file_change_tx: broadcast::Sender<FileChangeEvent>,
+    /// FileWatcher must be kept alive for the duration of the application.
+    /// It's stored here to prevent it from being dropped.
+    _watcher: Option<Arc<FileWatcher>>,
 }
 
 pub struct AppStateInner {
@@ -205,7 +210,12 @@ impl AppState {
         Ok(Self {
             inner: Arc::new(Mutex::new(state)),
             file_change_tx,
+            _watcher: None,
         })
+    }
+
+    pub fn set_watcher(&mut self, watcher: FileWatcher) {
+        self._watcher = Some(Arc::new(watcher));
     }
 
     pub fn reload(&self) -> anyhow::Result<()> {

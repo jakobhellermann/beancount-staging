@@ -76,7 +76,7 @@ pub fn router(journal: Vec<PathBuf>, staging_source: StagingSource) -> Result<Ro
 
     // Initialize application state first
     let (file_change_tx, _rx) = tokio::sync::broadcast::channel(100);
-    let state = AppState::new(journal, staging_source, file_change_tx.clone())?;
+    let mut state = AppState::new(journal, staging_source, file_change_tx.clone())?;
 
     spawn_blocking({
         let state = state.clone();
@@ -87,7 +87,8 @@ pub fn router(journal: Vec<PathBuf>, staging_source: StagingSource) -> Result<Ro
         }
     });
 
-    let _watcher = {
+    // Set up file watcher and store it in AppState to keep it alive
+    let watcher = {
         let state_ = state.lock().unwrap();
         let relevant_files = {
             state_
@@ -120,6 +121,9 @@ pub fn router(journal: Vec<PathBuf>, staging_source: StagingSource) -> Result<Ro
             }
         })?
     };
+
+    // Store watcher in AppState to prevent it from being dropped
+    state.set_watcher(watcher);
 
     // Build router with API routes first, then fallback to embedded static files
     let app = Router::new()
