@@ -78,15 +78,19 @@ impl ReconcileState {
 fn read_directives_from_files(path: &[PathBuf]) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
     let mut directives = Vec::new();
     let files = path.iter().map(Clone::clone);
-    let mut iter = beancount_parser::read_files_iter::<Decimal>(files);
-    for entry in iter.by_ref() {
-        if let Entry::Directive(directive) = entry? {
+    let mut loaded = HashSet::new();
+    beancount_parser::read_files_v2::<Decimal, _>(files, |entry| match entry {
+        Entry::Directive(directive) => {
             directives.push(directive);
         }
-    }
+        Entry::Include(path_buf) => {
+            loaded.insert(path_buf);
+        }
+        _ => {}
+    })?;
     crate::sorting::sort_dedup_directives(&mut directives);
 
-    Ok((directives, iter.loaded()))
+    Ok((directives, loaded))
 }
 
 fn read_directives_from_command(
