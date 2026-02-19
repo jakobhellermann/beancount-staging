@@ -3,7 +3,6 @@ name = "beancount-staging-py"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
-readme.workspace = true
 repository.workspace = true
 version.workspace = true
 categories.workspace = true
