@@ -25,13 +25,15 @@ use std::{io::BufWriter, path::Path};
 /// Read all directives from the given source.
 pub fn read_directives(file: impl AsRef<Path>) -> Result<Vec<Directive>> {
     let mut directives = Vec::new();
-    for entry in
-        beancount_parser::read_files_iter::<Decimal>(std::iter::once(file.as_ref().to_owned()))
-    {
-        if let Entry::Directive(directive) = entry? {
-            directives.push(directive);
-        }
-    }
+
+    beancount_parser::read_files_v2::<Decimal, _>(
+        std::iter::once(file.as_ref().to_owned()),
+        |entry| {
+            if let Entry::Directive(directive) = entry {
+                directives.push(directive);
+            }
+        },
+    )?;
 
     sorting::sort_dedup_directives(&mut directives);
     Ok(directives)
