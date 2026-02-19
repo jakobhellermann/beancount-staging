@@ -70,7 +70,10 @@ impl ReconcileState {
     pub fn accounts(&self) -> BTreeSet<String> {
         self.journal
             .iter()
-            .filter_map(|directive| Some(directive.content.as_open()?.account.to_string()))
+            .filter_map(|directive| match &directive.content {
+                DirectiveContent::Open(open) => Some(open.account.to_string()),
+                _ => None,
+            })
             .collect()
     }
 }

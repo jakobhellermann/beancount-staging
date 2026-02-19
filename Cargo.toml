@@ -25,4 +25,4 @@ smartcore.opt-level = 3
 
 [patch.crates-io]
 # beancount-parser = { path = "/home/jakob/dev/rust/contrib/beancount-parser" }
-beancount-parser = { git = "https://github.com/jakobhellermann/beancount-parser", branch = "wip" }
+beancount-parser = { git = "https://github.com/jakobhellermann/beancount-parser", branch = "display-impls" }
