@@ -69,36 +69,24 @@ fn journal_matches_staging_transaction(
     let journal_payee = journal_directive
         .metadata
         .get("source_payee")
-        .and_then(|x| match x {
-            beancount_parser::metadata::Value::String(s) => Some(s.as_str()),
-            _ => None,
-        })
+        .and_then(|x| x.as_string())
         .or_else(|| {
             first_posting
                 .metadata
                 .get("source_payee")
-                .and_then(|x| match x {
-                    beancount_parser::metadata::Value::String(s) => Some(s.as_str()),
-                    _ => None,
-                })
+                .and_then(|x| x.as_string())
         })
         .or(journal.payee.as_deref());
 
     let journal_narration = journal_directive
         .metadata
         .get("source_desc")
-        .and_then(|x| match x {
-            beancount_parser::metadata::Value::String(s) => Some(s.as_str()),
-            _ => None,
-        })
+        .and_then(|x| x.as_string())
         .or_else(|| {
             first_posting
                 .metadata
                 .get("source_desc")
-                .and_then(|x| match x {
-                    beancount_parser::metadata::Value::String(s) => Some(s.as_str()),
-                    _ => None,
-                })
+                .and_then(|x| x.as_string())
         })
         .or(journal.narration.as_deref());
 

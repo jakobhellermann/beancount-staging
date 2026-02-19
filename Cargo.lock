@@ -210,8 +210,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "beancount-parser"
 version = "2.5.0"
-source = "git+https://github.com/jakobhellermann/beancount-parser?branch=display-impls#4827dfcf7fc79cf57612aa91c2b1415d5fa44c2d"
+source = "git+https://github.com/jakobhellermann/beancount-parser?branch=wip#32507165193dcd5eb014d9ca73f23dbff03a7f81"
 dependencies = [
+ "indexmap",
  "nom 8.0.0",
  "nom_locate",
 ]
