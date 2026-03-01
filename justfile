@@ -6,7 +6,7 @@ run *args:
 
 real *args:
     just frontend build
-    cargo run -q -p beancount-staging-cli -- -j ~/finances/src/transactions.beancount -j ~/finances/journal.beancount -j ~/finances/src/ignored.beancount -s ~/finances/extracted.beancount {{ args }}
+    cargo run -q -p beancount-staging-cli -- -c ~/finances {{ args }}
 
 predict-eval *args:
     cargo run -r -p beancount-staging-predictor --example evaluate -- -j ~/finances/src/transactions.beancount -j ~/finances/journal.beancount -j ~/finances/src/ignored.beancount {{ args }}

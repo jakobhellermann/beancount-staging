@@ -248,9 +248,9 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "New Payee" "Test Narration"
+          source_payee: "Original Payee"
           Assets:Checking -50.00 USD
           Expenses:Food
-          source_payee: "Original Payee"
         "#);
     }
 
@@ -273,9 +273,9 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "Test Payee" "New Narration"
+          source_desc: "Original Narration"
           Assets:Checking -50.00 USD
           Expenses:Food
-          source_desc: "Original Narration"
         "#);
     }
 
@@ -298,10 +298,10 @@ mod tests {
         insta::assert_snapshot!(content, @r#"
 
         2024-01-15 * "New Payee" "New Narration"
-          Assets:Checking -50.00 USD
-          Expenses:Food
           source_payee: "Original Payee"
           source_desc: "Original Narration"
+          Assets:Checking -50.00 USD
+          Expenses:Food
         "#);
     }
 

@@ -47,7 +47,7 @@
           cargoLock = {
             lockFile = ./Cargo.lock;
             outputHashes = {
-              "beancount-parser-2.5.0" = "sha256-1CaR9CtbcJJXqOy8UlI8rgRXMdhP5BkgF74oy9OXU/Y=";
+              "beancount-parser-2.6.0" = "sha256-6kAfBC8ImVPzz3fmH6TXsW+1Iy9CSTcRsn+regKCXW4=";
             };
           };
           env = {
