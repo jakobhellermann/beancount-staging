@@ -124,13 +124,20 @@ fn commit_transaction_to_writer(
             txn.narration = Some(new_narration.to_string());
         }
 
-        // Add balancing posting with expense account if provided (no amount - beancount infers it)
+        // Add or update balancing posting with expense account if provided (no amount - beancount infers it)
         if let Some(expense_account) = expense_account {
             let account: beancount_parser::Account = expense_account
                 .parse()
                 .with_context(|| format!("Failed to parse account name: '{}'", expense_account))?;
-            txn.postings
-                .push(beancount_parser::Posting::from_account(account));
+
+            // If there's already an unbalanced posting (no amount), update its account
+            // Otherwise, add a new balancing posting
+            if let Some(unbalanced_posting) = txn.postings.iter_mut().find(|p| p.amount.is_none()) {
+                unbalanced_posting.account = account;
+            } else {
+                txn.postings
+                    .push(beancount_parser::Posting::from_account(account));
+            }
         }
     }
 
@@ -369,6 +376,71 @@ mod tests {
 
         assert!(result.is_err());
         insta::assert_snapshot!(result.unwrap_err().to_string(), @"Failed to parse account name: 'Invalid Account Name!'");
+    }
+
+    /// Test for bug: transaction with existing unbalanced posting should not get duplicate posting
+    /// When a staging transaction already has a second posting without an amount (e.g. Assets:ZeroSum:Transfers),
+    /// committing with an expense_account should NOT add another posting.
+    #[test]
+    fn test_commit_transaction_with_existing_unbalanced_posting() {
+        let content = r#"2024-01-15 ! "Lastschrift"
+    Assets:ScalableCapital:Cash 500.00 EUR
+    Assets:ZeroSum:Transfers
+"#;
+        let directive = parse_directive(content);
+        let mut output = Vec::new();
+
+        // User selects "Assets:ZeroSum:Transfers" in the UI (same account as the existing posting)
+        commit_transaction_to_writer(
+            &directive,
+            Some("Assets:ZeroSum:Transfers"),
+            None,
+            None,
+            SourceMetaTarget::Transaction,
+            &mut output,
+        )
+        .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        // Should NOT have duplicate Assets:ZeroSum:Transfers posting
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "Lastschrift"
+          Assets:ScalableCapital:Cash 500.00 EUR
+          Assets:ZeroSum:Transfers
+        "#);
+    }
+
+    /// Test that when user changes the account of an existing unbalanced posting,
+    /// the account is updated rather than adding a new posting.
+    #[test]
+    fn test_commit_transaction_updates_existing_unbalanced_posting() {
+        let content = r#"2024-01-15 ! "Lastschrift"
+    Assets:ScalableCapital:Cash 500.00 EUR
+    Assets:ZeroSum:Transfers
+"#;
+        let directive = parse_directive(content);
+        let mut output = Vec::new();
+
+        // User changes the account to something different
+        commit_transaction_to_writer(
+            &directive,
+            Some("Expenses:Groceries"),
+            None,
+            None,
+            SourceMetaTarget::Transaction,
+            &mut output,
+        )
+        .unwrap();
+
+        let content = String::from_utf8(output).unwrap();
+        // Should update the existing unbalanced posting, not add a new one
+        insta::assert_snapshot!(content, @r#"
+
+        2024-01-15 * "Lastschrift"
+          Assets:ScalableCapital:Cash 500.00 EUR
+          Expenses:Groceries
+        "#);
     }
 
     #[test]
