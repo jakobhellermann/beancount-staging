@@ -303,6 +303,7 @@ describe("App Integration", () => {
             price: null,
           },
         ],
+        is_balanced: true,
       };
 
       renderer.render(transaction);

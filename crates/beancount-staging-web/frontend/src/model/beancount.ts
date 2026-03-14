@@ -10,6 +10,7 @@ export interface Transaction {
   tags: string[];
   links: string[];
   postings: Posting[];
+  is_balanced: boolean;
 }
 
 export interface Balance {

@@ -69,11 +69,8 @@ export class DirectiveRenderer {
       );
     }
 
-    // Check if transaction is already balanced (all postings have amounts AND sum to zero)
-    const isBalanced =
-      txn.postings.length >= 2 &&
-      txn.postings.every((p) => p.amount !== null) &&
-      this.isTransactionBalanced(txn);
+    // Use backend-computed balance status
+    const isBalanced = txn.is_balanced;
 
     // Find if transaction already has an expense posting (posting without amount)
     const expensePosting = txn.postings.find((p) => !p.amount);
@@ -258,31 +255,5 @@ export class DirectiveRenderer {
         e.preventDefault();
       }
     }
-  }
-
-  private isTransactionBalanced(txn: Transaction): boolean {
-    // Group amounts by currency
-    const totalsByCurrency = new Map<string, number>();
-
-    for (const posting of txn.postings) {
-      if (!posting.amount) {
-        return false;
-      }
-
-      const currency = posting.amount.currency;
-      const value = parseFloat(posting.amount.value);
-
-      const current = totalsByCurrency.get(currency) ?? 0;
-      totalsByCurrency.set(currency, current + value);
-    }
-
-    // Check if all currency totals are zero (within floating point precision)
-    for (const total of totalsByCurrency.values()) {
-      if (Math.abs(total) > 0.005) {
-        return false;
-      }
-    }
-
-    return true;
   }
 }

@@ -37,6 +37,7 @@ describe("DirectiveRenderer", () => {
         price: null,
       },
     ],
+    is_balanced: false,
     ...overrides,
   });
 
@@ -295,6 +296,7 @@ describe("DirectiveRenderer", () => {
             price: null,
           },
         ],
+        is_balanced: true,
       });
       renderer.render(txn);
 
@@ -331,6 +333,83 @@ describe("DirectiveRenderer", () => {
       // Should have an editable account field since totals don't sum to zero
       const accountField = container.querySelector('[data-key="a"]');
       expect(accountField).toBeTruthy();
+    });
+
+    it("should not show editable account field for transaction with posting without amount", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Bank",
+            amount: { value: "-50.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+          {
+            account: "Expenses:Food",
+            amount: null,
+            cost: null,
+            price: null,
+          },
+        ],
+        is_balanced: true,
+      });
+      renderer.render(txn);
+
+      // Should not have an additional editable account field - the existing one without amount is editable
+      const accountFields = container.querySelectorAll('[data-key="a"]');
+      expect(accountFields.length).toBe(1);
+      // The editable field should be the Expenses:Food posting
+      expect(accountFields[0].textContent).toBe("Expenses:Food");
+    });
+
+    it("should not show editable account field for transaction with cost basis", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:ScalableCapital:MsciWorld",
+            amount: { value: "28.11", currency: "IE00BYX2JD69" },
+            cost: "{# 350.00 EUR}",
+            price: null,
+          },
+          {
+            account: "Assets:ScalableCapital:Cash",
+            amount: { value: "-350.00", currency: "EUR" },
+            cost: null,
+            price: null,
+          },
+        ],
+        is_balanced: true,
+      });
+      renderer.render(txn);
+
+      // Should not have any editable account field - transaction is balanced via cost
+      const accountField = container.querySelector('[data-key="a"]');
+      expect(accountField).toBeNull();
+    });
+
+    it("should not show editable account field for transaction with per-unit cost", () => {
+      const txn = createTransaction({
+        postings: [
+          {
+            account: "Assets:Stocks",
+            amount: { value: "10", currency: "AAPL" },
+            cost: "{15.00 USD}",
+            price: null,
+          },
+          {
+            account: "Assets:Cash",
+            amount: { value: "-150.00", currency: "USD" },
+            cost: null,
+            price: null,
+          },
+        ],
+        is_balanced: true,
+      });
+      renderer.render(txn);
+
+      // Should not have any editable account field - 10 * 15.00 = 150.00
+      const accountField = container.querySelector('[data-key="a"]');
+      expect(accountField).toBeNull();
     });
   });
 
