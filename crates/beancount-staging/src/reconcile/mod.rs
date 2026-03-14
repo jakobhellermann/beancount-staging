@@ -87,10 +87,11 @@ impl ReconcileState {
     }
 }
 
-fn read_directives_from_files(path: &[PathBuf]) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
+fn read_directives_from_files(paths: &[PathBuf]) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
     let mut directives = Vec::new();
-    let files = path.iter().map(Clone::clone);
-    let mut loaded = HashSet::new();
+    let files = paths.iter().map(Clone::clone);
+    // Start with the main files, then add any included files
+    let mut loaded: HashSet<PathBuf> = paths.iter().cloned().collect();
     beancount_parser::read_files_v2::<Decimal, _>(files, |entry| match entry {
         Entry::Directive(directive) => {
             directives.push(directive);
