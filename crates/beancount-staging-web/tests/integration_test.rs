@@ -1,3 +1,4 @@
+use beancount_staging::AutoCategorizeRule;
 use beancount_staging::reconcile::StagingSource;
 use beancount_staging_web::ListenerType;
 
@@ -48,6 +49,7 @@ async fn test_api_workflow() {
         beancount_staging_web::run(
             journal,
             StagingSource::Files(staging),
+            Vec::new(),
             ListenerType::Tcp(8081),
         )
         .await
@@ -217,6 +219,7 @@ async fn test_file_watching_detects_changes() {
         beancount_staging_web::run(
             journal,
             StagingSource::Files(staging),
+            Vec::new(),
             ListenerType::Tcp(8082),
         )
         .await
@@ -316,5 +319,92 @@ async fn test_file_watching_detects_changes() {
     );
 
     // Cleanup
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_auto_categorize_hides_matching_transaction() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("beancount-auto-cat-test-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let journal_path = temp_dir.join("journal.beancount");
+    let staging_path = temp_dir.join("staging.beancount");
+
+    std::fs::write(
+        &journal_path,
+        r#"
+2024-01-01 open Assets:BIBEssen:Checking
+2024-01-01 open Assets:ZeroSum:Transfers
+2024-01-01 open Expenses:Misc
+"#,
+    )
+    .unwrap();
+
+    // One transaction matches the rule (should be auto-committed, not shown).
+    // One does not match (should appear in /api/init).
+    std::fs::write(
+        &staging_path,
+        r#"
+2024-03-26 * "PayPal Europe S.a.r.l. et Cie S.C.A" "Spotify subscription"
+    Assets:BIBEssen:Checking  -12.99 EUR
+    Assets:ZeroSum:Transfers
+
+2024-03-27 * "Bakery" "Bread"
+    Assets:BIBEssen:Checking  -3.50 EUR
+"#,
+    )
+    .unwrap();
+
+    let journal = vec![journal_path.clone()];
+    let staging = vec![staging_path];
+
+    let rules = vec![AutoCategorizeRule {
+        payee: regex::Regex::new("PayPal Europe").unwrap(),
+        source_account: "Assets:BIBEssen:Checking".to_string(),
+        target_account: "Assets:ZeroSum:Transfers".to_string(),
+    }];
+
+    tokio::spawn(async move {
+        beancount_staging_web::run(
+            journal,
+            StagingSource::Files(staging),
+            rules,
+            ListenerType::Tcp(8083),
+        )
+        .await
+        .ok();
+    });
+
+    // Wait a bit for the server to come up and reload to run.
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    let client = reqwest::Client::new();
+    let init: serde_json::Value = client
+        .get("http://localhost:8083/api/init")
+        .send()
+        .await
+        .expect("init request failed")
+        .json()
+        .await
+        .expect("init json parse failed");
+
+    let items = init["items"].as_array().expect("items should be array");
+    assert_eq!(
+        items.len(),
+        1,
+        "auto-categorized transaction should not appear in /api/init"
+    );
+    let remaining_payee = items[0]["payee"].as_str().unwrap_or("");
+    assert_eq!(remaining_payee, "Bakery");
+
+    // Verify the auto-committed transaction was appended to the journal.
+    let journal_contents = std::fs::read_to_string(&journal_path).unwrap();
+    assert!(
+        journal_contents.contains("2024-03-26 * \"PayPal Europe"),
+        "journal should contain auto-committed PayPal transaction, got:\n{}",
+        journal_contents
+    );
+
     let _ = std::fs::remove_dir_all(&temp_dir);
 }

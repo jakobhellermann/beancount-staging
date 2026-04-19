@@ -35,6 +35,7 @@ mod beancount_staging {
             beancount_staging_web::run(
                 journal_files,
                 StagingSource::Files(staging_files),
+                Vec::new(),
                 ListenerType::Tcp(port),
             ),
         )

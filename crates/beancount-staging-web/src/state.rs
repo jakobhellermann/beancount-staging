@@ -2,7 +2,7 @@ use beancount_parser::Account;
 use beancount_staging::reconcile::{
     ReconcileConfig, ReconcileItemKind, ReconcileState, StagingSource,
 };
-use beancount_staging::{Directive, DirectiveContent};
+use beancount_staging::{AutoCategorizeRule, Directive, DirectiveContent};
 use beancount_staging_predictor::preprocessing::Alpha;
 use beancount_staging_predictor::{DecisionTreePredictor, PredictionInput, Predictor};
 use std::collections::hash_map::DefaultHasher;
@@ -114,6 +114,7 @@ pub struct AppState {
 pub struct AppStateInner {
     pub reconcile_config: ReconcileConfig,
     pub reconcile_state: ReconcileState,
+    pub auto_rules: Vec<AutoCategorizeRule>,
 
     // derived data
     pub staging_items: BTreeMap<String, Directive>,
@@ -122,12 +123,17 @@ pub struct AppStateInner {
 }
 
 impl AppStateInner {
-    fn new(journal_paths: Vec<PathBuf>, staging_source: StagingSource) -> Self {
+    fn new(
+        journal_paths: Vec<PathBuf>,
+        staging_source: StagingSource,
+        auto_rules: Vec<AutoCategorizeRule>,
+    ) -> Self {
         let reconcile_config = ReconcileConfig::new(journal_paths, staging_source);
 
         AppStateInner {
             reconcile_config,
             reconcile_state: ReconcileState::default(),
+            auto_rules,
             staging_items: BTreeMap::new(),
             available_accounts: BTreeSet::default(),
             predictor: None,
@@ -136,6 +142,59 @@ impl AppStateInner {
 
     fn reload(&mut self) -> anyhow::Result<()> {
         self.reconcile_state = self.reconcile_config.read()?;
+        let results = self.reconcile_state.reconcile()?;
+
+        // Auto-commit any staging items matching an auto-categorize rule. Collect
+        // matches first so we can drop the borrow on `results` before mutating
+        // the journal file (which would require a re-read to be visible here).
+        let journal_path = self.reconcile_config.journal_paths.first().cloned();
+        let mut committed_lines: Vec<String> = Vec::new();
+        if let Some(journal_path) = journal_path.as_ref() {
+            for item in &results {
+                if let ReconcileItemKind::OnlyInStaging(directive) = item.item
+                    && let Some(rule) =
+                        beancount_staging::find_matching_rule(directive, &self.auto_rules)
+                {
+                    let txn = directive.content.as_transaction();
+                    let payee = txn.and_then(|t| t.payee.as_deref()).unwrap_or("");
+                    let amount = txn
+                        .and_then(|t| t.postings.first())
+                        .and_then(|p| p.amount.as_ref())
+                        .map(|a| format!("{} {}", a.value, a.currency))
+                        .unwrap_or_else(|| "?".to_string());
+                    if let Err(e) = beancount_staging::commit_transaction(
+                        directive,
+                        Some(&rule.target_account),
+                        None,
+                        None,
+                        beancount_staging::SourceMetaTarget::Transaction,
+                        journal_path,
+                    ) {
+                        tracing::error!(
+                            "Failed to auto-commit transaction (payee={:?}): {}",
+                            payee,
+                            e
+                        );
+                    } else {
+                        committed_lines.push(format!(
+                            "{} {:?} ({}) -> {}",
+                            directive.date, payee, amount, rule.target_account,
+                        ));
+                    }
+                }
+            }
+        }
+
+        if !committed_lines.is_empty() {
+            tracing::info!(
+                "Auto-categorized {} transactions:\n  {}",
+                committed_lines.len(),
+                committed_lines.join("\n  "),
+            );
+            // Re-read so the newly-committed transactions show up as journal-matched
+            // and are filtered out of the UI list below.
+            self.reconcile_state = self.reconcile_config.read()?;
+        }
         let results = self.reconcile_state.reconcile()?;
 
         // Filter only staging items and build BTreeMap with unique IDs
@@ -204,9 +263,10 @@ impl AppState {
     pub fn new(
         journal_paths: Vec<PathBuf>,
         staging_source: StagingSource,
+        auto_rules: Vec<AutoCategorizeRule>,
         file_change_tx: broadcast::Sender<FileChangeEvent>,
     ) -> anyhow::Result<Self> {
-        let mut state = AppStateInner::new(journal_paths, staging_source);
+        let mut state = AppStateInner::new(journal_paths, staging_source, auto_rules);
         state.reload()?;
 
         Ok(Self {

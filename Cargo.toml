@@ -16,7 +16,8 @@ description = "A tool for interactively reviewing and accepting automated beanco
 [workspace.dependencies]
 anyhow = "1.0"
 beancount-parser = "2.6"
-insta = "1.46"
+insta = "1.47"
+regex = "1.12"
 
 [profile.dev.package]
 insta.opt-level = 3

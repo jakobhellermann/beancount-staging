@@ -22,6 +22,45 @@ use beancount_parser::metadata::Value;
 
 use std::{io::BufWriter, path::Path};
 
+/// A rule for auto-categorizing staging transactions.
+///
+/// When a staging transaction's payee matches the `payee` regex (as a
+/// substring, not anchored) and its first posting's account equals
+/// `source_account`, the transaction is committed to the journal with
+/// `target_account` as the balancing posting — without UI review.
+#[derive(Debug, Clone)]
+pub struct AutoCategorizeRule {
+    pub payee: regex::Regex,
+    pub source_account: String,
+    pub target_account: String,
+}
+
+impl AutoCategorizeRule {
+    pub fn matches(&self, directive: &Directive) -> bool {
+        let DirectiveContent::Transaction(txn) = &directive.content else {
+            return false;
+        };
+        let Some(payee) = &txn.payee else {
+            return false;
+        };
+        if !self.payee.is_match(payee) {
+            return false;
+        }
+        let Some(first_posting) = txn.postings.first() else {
+            return false;
+        };
+        first_posting.account.to_string() == self.source_account
+    }
+}
+
+/// Find the first rule that matches the given directive, if any.
+pub fn find_matching_rule<'a>(
+    directive: &Directive,
+    rules: &'a [AutoCategorizeRule],
+) -> Option<&'a AutoCategorizeRule> {
+    rules.iter().find(|rule| rule.matches(directive))
+}
+
 /// Read all directives from the given source.
 pub fn read_directives(file: impl AsRef<Path>) -> Result<Vec<Directive>> {
     let mut directives = Vec::new();
@@ -489,5 +528,99 @@ mod tests {
         assert!(content1.contains("2024-01-15 *"));
         assert!(content2.contains("2024-01-15 *"));
         assert!(content3.contains("2024-01-15 *"));
+    }
+
+    fn make_rule(payee_pattern: &str, source: &str, target: &str) -> AutoCategorizeRule {
+        AutoCategorizeRule {
+            payee: regex::Regex::new(payee_pattern).unwrap(),
+            source_account: source.to_string(),
+            target_account: target.to_string(),
+        }
+    }
+
+    #[test]
+    fn auto_rule_contains_match() {
+        let directive = parse_directive(
+            r#"2024-01-15 ! "PayPal Europe S.a.r.l. et Cie S.C.A" "Spotify"
+    Assets:BIBEssen:Checking  -12.99 EUR
+    Assets:ZeroSum:Transfers
+"#,
+        );
+        let rule = make_rule(
+            "PayPal Europe",
+            "Assets:BIBEssen:Checking",
+            "Assets:ZeroSum:Transfers",
+        );
+        assert!(rule.matches(&directive));
+    }
+
+    #[test]
+    fn auto_rule_anchored_match() {
+        let directive = parse_directive(
+            r#"2024-01-15 ! "PayPal Europe S.a.r.l. et Cie S.C.A" "Spotify"
+    Assets:BIBEssen:Checking  -12.99 EUR
+    Assets:ZeroSum:Transfers
+"#,
+        );
+        let exact = make_rule(
+            "^PayPal Europe S.a.r.l. et Cie S.C.A$",
+            "Assets:BIBEssen:Checking",
+            "X",
+        );
+        assert!(exact.matches(&directive));
+        let too_short = make_rule("^PayPal$", "Assets:BIBEssen:Checking", "X");
+        assert!(!too_short.matches(&directive));
+    }
+
+    #[test]
+    fn auto_rule_wrong_source_account() {
+        let directive = parse_directive(
+            r#"2024-01-15 ! "PayPal" "X"
+    Assets:OtherBank:Checking  -12.99 EUR
+    Assets:ZeroSum:Transfers
+"#,
+        );
+        let rule = make_rule(
+            "PayPal",
+            "Assets:BIBEssen:Checking",
+            "Assets:ZeroSum:Transfers",
+        );
+        assert!(!rule.matches(&directive));
+    }
+
+    #[test]
+    fn auto_rule_payee_missing() {
+        let directive = parse_directive(
+            r#"2024-01-15 ! "narration only"
+    Assets:BIBEssen:Checking  -12.99 EUR
+    Assets:ZeroSum:Transfers
+"#,
+        );
+        let rule = make_rule(
+            "PayPal",
+            "Assets:BIBEssen:Checking",
+            "Assets:ZeroSum:Transfers",
+        );
+        assert!(!rule.matches(&directive));
+    }
+
+    #[test]
+    fn find_matching_rule_returns_first() {
+        let directive = parse_directive(
+            r#"2024-01-15 ! "PayPal Spotify" "x"
+    Assets:BIBEssen:Checking  -12.99 EUR
+"#,
+        );
+        let rules = vec![
+            make_rule("Netflix", "Assets:BIBEssen:Checking", "X"),
+            make_rule(
+                "PayPal",
+                "Assets:BIBEssen:Checking",
+                "Assets:ZeroSum:Transfers",
+            ),
+            make_rule("PayPal Spotify", "Assets:BIBEssen:Checking", "Z"),
+        ];
+        let matched = find_matching_rule(&directive, &rules).unwrap();
+        assert_eq!(matched.target_account, "Assets:ZeroSum:Transfers");
     }
 }

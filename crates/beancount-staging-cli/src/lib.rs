@@ -8,6 +8,7 @@ pub use beancount_staging;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use beancount_staging::AutoCategorizeRule;
 use beancount_staging::reconcile::StagingSource;
 use clap::{Args as ClapArgs, CommandFactory as _, Parser, Subcommand, error::ErrorKind};
 
@@ -108,6 +109,17 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
         },
     });
 
+    // Compile auto-categorization rules from config
+    let auto_rules: Vec<AutoCategorizeRule> = config
+        .map(|(_, c)| {
+            c.auto_categorize
+                .into_iter()
+                .map(|r| r.compile())
+                .collect::<Result<Vec<_>>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+
     // override from cli
     if !args.files.journal_file.is_empty() {
         journal_paths = args.files.journal_file;
@@ -141,7 +153,13 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
         Commands::Diff {
             debug,
             include_only_journal,
-        } => show::show_diff(journal_paths, staging_source, debug, include_only_journal),
+        } => show::show_diff(
+            journal_paths,
+            staging_source,
+            &auto_rules,
+            debug,
+            include_only_journal,
+        ),
         Commands::Serve { port, socket } => {
             let listener = if let Some(socket_path) = socket {
                 beancount_staging_web::ListenerType::UnixSocket(socket_path)
@@ -150,7 +168,7 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
                     port.unwrap_or(beancount_staging_web::DEFAULT_PORT),
                 )
             };
-            beancount_staging_web::run(journal_paths, staging_source, listener).await
+            beancount_staging_web::run(journal_paths, staging_source, auto_rules, listener).await
         } /*Commands::Cli => {
                 review::review_interactive(journal_paths, staging_source)
           }*/

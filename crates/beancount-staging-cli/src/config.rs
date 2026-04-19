@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use beancount_staging::AutoCategorizeRule;
 use beancount_staging::reconcile::StagingSource;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -42,11 +43,37 @@ impl TryFrom<RawConfigStaging> for ConfigStaging {
     }
 }
 
+/// TOML schema for an auto-categorization rule.
+///
+/// `payee` is a regex applied as substring match (not anchored). Use `^...$`
+/// for exact matches.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConfigAutoCategorizeRule {
+    pub payee: String,
+    pub source_account: String,
+    pub target_account: String,
+}
+
+impl ConfigAutoCategorizeRule {
+    pub fn compile(self) -> Result<AutoCategorizeRule> {
+        let payee = regex::Regex::new(&self.payee)
+            .with_context(|| format!("Invalid regex in auto_categorize.payee: {:?}", self.payee))?;
+        Ok(AutoCategorizeRule {
+            payee,
+            source_account: self.source_account,
+            target_account: self.target_account,
+        })
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub journal: ConfigJournal,
     pub staging: ConfigStaging,
+    #[serde(default)]
+    pub auto_categorize: Vec<ConfigAutoCategorizeRule>,
 }
 
 impl Config {

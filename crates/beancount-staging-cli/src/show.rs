@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use beancount_parser::DirectiveContent;
+use beancount_staging::AutoCategorizeRule;
 use beancount_staging::reconcile::{
     MismatchReason, ReconcileConfig, ReconcileItemKind, StagingSource,
 };
@@ -10,6 +11,7 @@ use beancount_staging::reconcile::{
 pub fn show_diff(
     journal: Vec<PathBuf>,
     staging_source: StagingSource,
+    auto_rules: &[AutoCategorizeRule],
     debug: bool,
     include_only_journal: bool,
 ) -> Result<()> {
@@ -43,6 +45,9 @@ pub fn show_diff(
                 }
             }
             ReconcileItemKind::OnlyInStaging(directive) => {
+                if beancount_staging::find_matching_rule(directive, auto_rules).is_some() {
+                    continue;
+                }
                 println!("{staging_style}━━━ Only in Staging (needs review) ━━━{staging_style:#}");
                 println!("{}", directive);
 

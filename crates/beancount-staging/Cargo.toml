@@ -10,6 +10,7 @@ description.workspace = true
 [dependencies]
 anyhow.workspace = true
 beancount-parser.workspace = true
+regex.workspace = true
 rust_decimal = { version = "1.40", default-features = false }
 tracing = { version = "0.1", default-features = false }
 
