@@ -12,11 +12,11 @@ exclude = ["learning_curve.png"]
 anyhow.workspace = true
 beancount-parser.workspace = true
 beancount-staging = { path = "../beancount-staging" }
-clap = { version = "4.5", features = ["derive"] }
-smartcore = "0.4"
-ndarray = "0.16"
-regex = "1.11"
-rand = "0.9"
+clap = { version = "4.6", features = ["derive"] }
+smartcore = "0.5"
+ndarray = "0.17"
+regex = "1.12"
+rand = "0.10"
 
 [dev-dependencies]
 insta.workspace = true
