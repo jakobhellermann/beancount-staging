@@ -286,6 +286,7 @@ dependencies = [
  "beancount-staging",
  "beancount-staging-predictor",
  "futures",
+ "insta",
  "mime_guess",
  "notify",
  "notify-debouncer-full",

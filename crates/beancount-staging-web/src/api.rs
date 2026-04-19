@@ -9,61 +9,12 @@ use axum::{
 };
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::convert::Infallible;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::state::AppState;
 use beancount_staging::Directive;
-
-/// Check if a transaction is balanced (doesn't need an additional posting)
-///
-/// A transaction is balanced if:
-/// - Any posting has no amount (beancount will auto-balance it), OR
-/// - All postings have amounts and they sum to zero per currency (considering cost basis)
-fn is_transaction_balanced(txn: &beancount_staging::Transaction) -> bool {
-    // If any posting has no amount, beancount will auto-balance it
-    if txn.postings.iter().any(|p| p.amount.is_none()) {
-        return true;
-    }
-
-    // Group amounts by currency and sum them
-    // For postings with cost, use the cost amount instead of the raw amount
-    let mut totals_by_currency: HashMap<String, beancount_staging::Decimal> = HashMap::new();
-
-    for posting in &txn.postings {
-        if let Some(amount) = &posting.amount {
-            // If posting has a cost, use the cost amount for balance calculation
-            let (value, currency) = if let Some(cost) = &posting.cost {
-                // Prefer total_amount (e.g., {# 350 EUR}), fall back to per-unit amount
-                if let Some(total) = &cost.total_amount {
-                    (total.value, total.currency.to_string())
-                } else if let Some(per_unit) = &cost.amount {
-                    // Calculate total from per-unit cost × units
-                    (per_unit.value * amount.value, per_unit.currency.to_string())
-                } else {
-                    // Cost without amount (e.g., just a date) - use raw amount
-                    (amount.value, amount.currency.to_string())
-                }
-            } else {
-                (amount.value, amount.currency.to_string())
-            };
-
-            let current = totals_by_currency
-                .get(&currency)
-                .copied()
-                .unwrap_or_default();
-            totals_by_currency.insert(currency, current + value);
-        }
-    }
-
-    // Check if all currency totals are zero (within tolerance)
-    let tolerance = beancount_staging::Decimal::new(5, 3); // 0.005
-    totals_by_currency
-        .values()
-        .all(|total| total.abs() <= tolerance)
-}
 
 fn serialize_directive(id: &str, directive: &Directive) -> SerializedDirective {
     use beancount_parser::DirectiveContent;
@@ -99,7 +50,7 @@ fn serialize_directive(id: &str, directive: &Directive) -> SerializedDirective {
                 tags: txn.tags.iter().map(|t| t.to_string()).collect(),
                 links: txn.links.iter().map(|l| l.to_string()).collect(),
                 postings,
-                is_balanced: is_transaction_balanced(txn),
+                is_balanced: beancount_staging::is_transaction_balanced(txn),
             })
         }
         DirectiveContent::Balance(bal) => SerializedDirectiveContent::Balance(SerializedBalance {
@@ -257,7 +208,7 @@ pub async fn commit_transaction(
     // Check if transaction is balanced (all postings have amounts and sum to zero)
     let is_balanced =
         if let beancount_staging::DirectiveContent::Transaction(txn) = &directive.content {
-            is_transaction_balanced(txn)
+            beancount_staging::is_transaction_balanced(txn)
         } else {
             false
         };
@@ -340,76 +291,5 @@ where
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use beancount_parser::Entry;
-
-    fn parse_transaction(content: &str) -> beancount_staging::Transaction {
-        for entry in beancount_parser::parse_iter::<beancount_staging::Decimal>(content) {
-            if let Entry::Directive(directive) = entry.unwrap() {
-                if let beancount_staging::DirectiveContent::Transaction(txn) = directive.content {
-                    return txn;
-                }
-            }
-        }
-        panic!("No transaction found in content");
-    }
-
-    #[test]
-    fn test_single_posting_needs_account() {
-        let txn = parse_transaction(
-            r#"2024-01-15 * "Purchase"
-    Assets:Bank:Checking  -50.00 USD
-"#,
-        );
-        assert!(!is_transaction_balanced(&txn));
-    }
-
-    #[test]
-    fn test_two_postings_with_amounts_balanced() {
-        let txn = parse_transaction(
-            r#"2024-01-15 * "Transfer"
-    Assets:Bank:Checking  -50.00 USD
-    Assets:Bank:Savings    50.00 USD
-"#,
-        );
-        assert!(is_transaction_balanced(&txn));
-    }
-
-    #[test]
-    fn test_two_postings_with_amounts_unbalanced() {
-        let txn = parse_transaction(
-            r#"2024-01-15 * "Partial"
-    Assets:A  50.00 EUR
-    Assets:B -20.00 EUR
-"#,
-        );
-        assert!(!is_transaction_balanced(&txn));
-    }
-
-    #[test]
-    fn test_posting_without_amount_is_balanced() {
-        let txn = parse_transaction(
-            r#"2024-01-15 * "Purchase"
-    Assets:Bank:Checking  -50.00 USD
-    Expenses:Food
-"#,
-        );
-        assert!(is_transaction_balanced(&txn));
-    }
-
-    #[test]
-    fn test_transaction_with_cost_is_balanced() {
-        let txn = parse_transaction(
-            r#"2024-01-15 * "ETF Purchase"
-    Assets:ScalableCapital:MsciWorld  28.11 IE00BYX2JD69 {# 350.00 EUR}
-    Assets:ScalableCapital:Cash      -350.00 EUR
-"#,
-        );
-        assert!(is_transaction_balanced(&txn));
     }
 }

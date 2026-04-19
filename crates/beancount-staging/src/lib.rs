@@ -61,6 +61,50 @@ pub fn find_matching_rule<'a>(
     rules.iter().find(|rule| rule.matches(directive))
 }
 
+/// Check if a transaction is balanced (doesn't need an additional posting).
+///
+/// A transaction is balanced if:
+/// - Any posting has no amount (beancount will auto-balance it), OR
+/// - All postings have amounts and they sum to zero per currency
+///   (considering cost basis)
+pub fn is_transaction_balanced(txn: &Transaction) -> bool {
+    use std::collections::HashMap;
+
+    if txn.postings.iter().any(|p| p.amount.is_none()) {
+        return true;
+    }
+
+    let mut totals_by_currency: HashMap<String, Decimal> = HashMap::new();
+
+    for posting in &txn.postings {
+        if let Some(amount) = &posting.amount {
+            let (value, currency) = if let Some(cost) = &posting.cost {
+                // Prefer total_amount (e.g., {# 350 EUR}); fall back to per-unit × units.
+                if let Some(total) = &cost.total_amount {
+                    (total.value, total.currency.to_string())
+                } else if let Some(per_unit) = &cost.amount {
+                    (per_unit.value * amount.value, per_unit.currency.to_string())
+                } else {
+                    (amount.value, amount.currency.to_string())
+                }
+            } else {
+                (amount.value, amount.currency.to_string())
+            };
+
+            let current = totals_by_currency
+                .get(&currency)
+                .copied()
+                .unwrap_or_default();
+            totals_by_currency.insert(currency, current + value);
+        }
+    }
+
+    let tolerance = Decimal::new(5, 3); // 0.005
+    totals_by_currency
+        .values()
+        .all(|total| total.abs() <= tolerance)
+}
+
 /// Read all directives from the given source.
 pub fn read_directives(file: impl AsRef<Path>) -> Result<Vec<Directive>> {
     let mut directives = Vec::new();
@@ -622,5 +666,67 @@ mod tests {
         ];
         let matched = find_matching_rule(&directive, &rules).unwrap();
         assert_eq!(matched.target_account, "Assets:ZeroSum:Transfers");
+    }
+
+    fn parse_txn(content: &str) -> Transaction {
+        let directive = parse_directive(content);
+        match directive.content {
+            DirectiveContent::Transaction(txn) => txn,
+            _ => panic!("expected transaction"),
+        }
+    }
+
+    #[test]
+    fn balanced_single_posting_unbalanced() {
+        let txn = parse_txn(
+            r#"2024-01-15 * "Purchase"
+    Assets:Bank:Checking  -50.00 USD
+"#,
+        );
+        assert!(!is_transaction_balanced(&txn));
+    }
+
+    #[test]
+    fn balanced_two_postings_summing_to_zero() {
+        let txn = parse_txn(
+            r#"2024-01-15 * "Transfer"
+    Assets:Bank:Checking  -50.00 USD
+    Assets:Bank:Savings    50.00 USD
+"#,
+        );
+        assert!(is_transaction_balanced(&txn));
+    }
+
+    #[test]
+    fn balanced_two_postings_not_summing_to_zero() {
+        let txn = parse_txn(
+            r#"2024-01-15 * "Partial"
+    Assets:A  50.00 EUR
+    Assets:B -20.00 EUR
+"#,
+        );
+        assert!(!is_transaction_balanced(&txn));
+    }
+
+    #[test]
+    fn balanced_posting_without_amount() {
+        let txn = parse_txn(
+            r#"2024-01-15 * "Purchase"
+    Assets:Bank:Checking  -50.00 USD
+    Expenses:Food
+"#,
+        );
+        assert!(is_transaction_balanced(&txn));
+    }
+
+    #[test]
+    fn balanced_transaction_with_cost() {
+        let txn = parse_txn(
+            r#"2024-01-15 * "ETF Purchase"
+    Assets:ScalableCapital:MsciWorld  28.11 IE00BYX2JD69 {# 350.00 EUR}
+    Assets:ScalableCapital:Cash      -350.00 EUR
+"#,
+        );
+        assert!(is_transaction_balanced(&txn));
     }
 }

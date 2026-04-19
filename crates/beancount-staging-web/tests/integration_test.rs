@@ -389,22 +389,134 @@ async fn test_auto_categorize_hides_matching_transaction() {
         .await
         .expect("init json parse failed");
 
-    let items = init["items"].as_array().expect("items should be array");
-    assert_eq!(
-        items.len(),
-        1,
-        "auto-categorized transaction should not appear in /api/init"
-    );
-    let remaining_payee = items[0]["payee"].as_str().unwrap_or("");
-    assert_eq!(remaining_payee, "Bakery");
+    let remaining_payees: Vec<&str> = init["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|it| it["payee"].as_str().unwrap_or(""))
+        .collect();
+    insta::assert_debug_snapshot!(remaining_payees, @r#"
+    [
+        "Bakery",
+    ]
+    "#);
 
-    // Verify the auto-committed transaction was appended to the journal.
     let journal_contents = std::fs::read_to_string(&journal_path).unwrap();
-    assert!(
-        journal_contents.contains("2024-03-26 * \"PayPal Europe"),
-        "journal should contain auto-committed PayPal transaction, got:\n{}",
-        journal_contents
-    );
+    insta::assert_snapshot!(journal_contents, @r#"
+
+    2024-01-01 open Assets:BIBEssen:Checking
+    2024-01-01 open Assets:ZeroSum:Transfers
+    2024-01-01 open Expenses:Misc
+
+    2024-03-26 * "PayPal Europe S.a.r.l. et Cie S.C.A" "Spotify subscription"
+      Assets:BIBEssen:Checking -12.99 EUR
+      Assets:ZeroSum:Transfers
+    "#);
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_auto_commit_balanced_starred_transaction() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("beancount-auto-balanced-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let journal_path = temp_dir.join("journal.beancount");
+    let staging_path = temp_dir.join("staging.beancount");
+
+    std::fs::write(
+        &journal_path,
+        r#"
+2024-01-01 open Assets:ZeroSum:Transfers
+2024-01-01 open Assets:PayPal
+2024-01-01 open Assets:BIBEssen:Checking
+"#,
+    )
+    .unwrap();
+
+    // Three staging entries:
+    //   1) balanced + *  -> should be auto-committed
+    //   2) balanced + !  -> must stay (needs review)
+    //   3) unbalanced + * -> must stay (still needs categorization)
+    std::fs::write(
+        &staging_path,
+        r#"
+2024-04-15 * "Bank" "Bankgutschrift auf PayPal-Konto 1"
+    Assets:ZeroSum:Transfers  -100.00 EUR
+    Assets:PayPal              100.00 EUR
+
+2024-04-16 ! "Bank" "Bankgutschrift auf PayPal-Konto 2"
+    Assets:ZeroSum:Transfers  -50.00 EUR
+    Assets:PayPal              50.00 EUR
+
+2024-04-17 * "Bakery" "Bread"
+    Assets:BIBEssen:Checking  -3.50 EUR
+"#,
+    )
+    .unwrap();
+
+    let journal = vec![journal_path.clone()];
+    let staging = vec![staging_path];
+
+    tokio::spawn(async move {
+        beancount_staging_web::run(
+            journal,
+            StagingSource::Files(staging),
+            Vec::new(),
+            ListenerType::Tcp(8084),
+        )
+        .await
+        .ok();
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    let client = reqwest::Client::new();
+    let init: serde_json::Value = client
+        .get("http://localhost:8084/api/init")
+        .send()
+        .await
+        .expect("init request failed")
+        .json()
+        .await
+        .expect("init json parse failed");
+
+    let remaining: Vec<(&str, &str)> = init["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|it| {
+            (
+                it["payee"].as_str().unwrap_or(""),
+                it["narration"].as_str().unwrap_or(""),
+            )
+        })
+        .collect();
+    insta::assert_debug_snapshot!(remaining, @r#"
+    [
+        (
+            "Bank",
+            "Bankgutschrift auf PayPal-Konto 2",
+        ),
+        (
+            "Bakery",
+            "Bread",
+        ),
+    ]
+    "#);
+
+    let journal_contents = std::fs::read_to_string(&journal_path).unwrap();
+    insta::assert_snapshot!(journal_contents, @r#"
+
+    2024-01-01 open Assets:ZeroSum:Transfers
+    2024-01-01 open Assets:PayPal
+    2024-01-01 open Assets:BIBEssen:Checking
+
+    2024-04-15 * "Bank" "Bankgutschrift auf PayPal-Konto 1"
+      Assets:ZeroSum:Transfers -100.00 EUR
+      Assets:PayPal 100.00 EUR
+    "#);
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }

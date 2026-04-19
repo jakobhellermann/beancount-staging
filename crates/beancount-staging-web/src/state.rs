@@ -144,54 +144,8 @@ impl AppStateInner {
         self.reconcile_state = self.reconcile_config.read()?;
         let results = self.reconcile_state.reconcile()?;
 
-        // Auto-commit any staging items matching an auto-categorize rule. Collect
-        // matches first so we can drop the borrow on `results` before mutating
-        // the journal file (which would require a re-read to be visible here).
-        let journal_path = self.reconcile_config.journal_paths.first().cloned();
-        let mut committed_lines: Vec<String> = Vec::new();
-        if let Some(journal_path) = journal_path.as_ref() {
-            for item in &results {
-                if let ReconcileItemKind::OnlyInStaging(directive) = item.item
-                    && let Some(rule) =
-                        beancount_staging::find_matching_rule(directive, &self.auto_rules)
-                {
-                    let txn = directive.content.as_transaction();
-                    let payee = txn.and_then(|t| t.payee.as_deref()).unwrap_or("");
-                    let amount = txn
-                        .and_then(|t| t.postings.first())
-                        .and_then(|p| p.amount.as_ref())
-                        .map(|a| format!("{} {}", a.value, a.currency))
-                        .unwrap_or_else(|| "?".to_string());
-                    if let Err(e) = beancount_staging::commit_transaction(
-                        directive,
-                        Some(&rule.target_account),
-                        None,
-                        None,
-                        beancount_staging::SourceMetaTarget::Transaction,
-                        journal_path,
-                    ) {
-                        tracing::error!(
-                            "Failed to auto-commit transaction (payee={:?}): {}",
-                            payee,
-                            e
-                        );
-                    } else {
-                        committed_lines.push(format!(
-                            "{} {:?} ({}) -> {}",
-                            directive.date, payee, amount, rule.target_account,
-                        ));
-                    }
-                }
-            }
-        }
-
-        if !committed_lines.is_empty() {
-            tracing::info!(
-                "Auto-categorized {} transactions:\n  {}",
-                committed_lines.len(),
-                committed_lines.join("\n  "),
-            );
-            // Re-read so the newly-committed transactions show up as journal-matched
+        if self.auto_commit_staging(&results) > 0 {
+            // Re-read so newly-committed transactions show up as journal-matched
             // and are filtered out of the UI list below.
             self.reconcile_state = self.reconcile_config.read()?;
         }
@@ -218,6 +172,80 @@ impl AppStateInner {
         // trained once at startup and can use slightly stale data.
 
         Ok(())
+    }
+
+    /// For each `OnlyInStaging` item, auto-commit it if either
+    /// (a) a user-configured rule matches, or
+    /// (b) the transaction is non-`!`-flagged and already balanced.
+    /// Logs a summary and returns the number of successful commits.
+    fn auto_commit_staging(
+        &self,
+        results: &[beancount_staging::reconcile::ReconcileItem<'_>],
+    ) -> usize {
+        let Some(journal_path) = self.reconcile_config.journal_paths.first() else {
+            return 0;
+        };
+        let mut committed_lines: Vec<String> = Vec::new();
+        for item in results {
+            let ReconcileItemKind::OnlyInStaging(directive) = item.item else {
+                continue;
+            };
+            let Some(target_account) = self.decide_auto_commit_target(directive) else {
+                continue;
+            };
+
+            let txn = directive.content.as_transaction();
+            let payee = txn.and_then(|t| t.payee.as_deref()).unwrap_or("");
+            let amount = txn
+                .and_then(|t| t.postings.first())
+                .and_then(|p| p.amount.as_ref())
+                .map(|a| format!("{} {}", a.value, a.currency))
+                .unwrap_or_else(|| "?".to_string());
+            if let Err(e) = beancount_staging::commit_transaction(
+                directive,
+                target_account,
+                None,
+                None,
+                beancount_staging::SourceMetaTarget::Transaction,
+                journal_path,
+            ) {
+                tracing::error!(
+                    "Failed to auto-commit transaction (payee={:?}): {}",
+                    payee,
+                    e
+                );
+            } else {
+                let target_desc = target_account.unwrap_or("(pre-balanced)");
+                committed_lines.push(format!(
+                    "{} {:?} ({}) -> {}",
+                    directive.date, payee, amount, target_desc,
+                ));
+            }
+        }
+        if !committed_lines.is_empty() {
+            tracing::info!(
+                "Auto-categorized {} transactions:\n  {}",
+                committed_lines.len(),
+                committed_lines.join("\n  "),
+            );
+        }
+        committed_lines.len()
+    }
+
+    /// Returns `Some(Some(target))` for a rule-matched commit,
+    /// `Some(None)` for a pre-balanced no-override commit, or
+    /// `None` if the transaction should be left for UI review.
+    fn decide_auto_commit_target<'a>(&'a self, directive: &Directive) -> Option<Option<&'a str>> {
+        if let Some(rule) = beancount_staging::find_matching_rule(directive, &self.auto_rules) {
+            return Some(Some(&rule.target_account));
+        }
+        if let DirectiveContent::Transaction(txn) = &directive.content
+            && txn.flag != Some('!')
+            && beancount_staging::is_transaction_balanced(txn)
+        {
+            return Some(None);
+        }
+        None
     }
 
     pub fn retrain(&mut self) -> anyhow::Result<()> {
