@@ -1,4 +1,5 @@
 mod config;
+mod lint;
 #[allow(dead_code)]
 mod review;
 mod show;
@@ -63,6 +64,8 @@ enum Commands {
         #[arg(long)]
         include_only_journal: bool,
     },
+    /// Check [[auto_categorize]] rules against the journal history
+    Lint,
     // /// Interactively review and stage transactions in the terminal
     // Cli,
 }
@@ -128,7 +131,7 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
         staging_source = Some(StagingSource::Files(args.files.staging_file));
     }
 
-    // Validate that we have both journal and staging source
+    // Journal is always required.
     if journal_paths.is_empty() {
         cmd.error(
             ErrorKind::MissingRequiredArgument,
@@ -136,6 +139,17 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
         )
         .exit();
     }
+
+    let command = args.command.unwrap_or(Commands::Serve {
+        port: Some(beancount_staging_web::DEFAULT_PORT),
+        socket: None,
+    });
+
+    // `lint` only needs the journal; other subcommands also need a staging source.
+    if matches!(command, Commands::Lint) {
+        return lint::run_lint(journal_paths, &auto_rules);
+    }
+
     if staging_source.is_none() {
         cmd.error(
             ErrorKind::MissingRequiredArgument,
@@ -145,10 +159,6 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
     }
     let staging_source = staging_source.unwrap();
 
-    let command = args.command.unwrap_or(Commands::Serve {
-        port: Some(beancount_staging_web::DEFAULT_PORT),
-        socket: None,
-    });
     match command {
         Commands::Diff {
             debug,
@@ -169,8 +179,10 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> Result<()> {
                 )
             };
             beancount_staging_web::run(journal_paths, staging_source, auto_rules, listener).await
-        } /*Commands::Cli => {
-                review::review_interactive(journal_paths, staging_source)
-          }*/
+        }
+        Commands::Lint => unreachable!("handled above"),
+        /*Commands::Cli => {
+            review::review_interactive(journal_paths, staging_source)
+        }*/
     }
 }

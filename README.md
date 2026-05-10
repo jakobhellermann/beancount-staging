@@ -104,6 +104,8 @@ assign_target_account = "Expenses:Gym"
 
 Already-balanced `*`-flagged transactions and standalone balance directives are also auto-committed.
 
+Run `beancount-staging lint` to check for unused rules or mismatches where the disagree with past categorization.
+
 ## How it works
 
 When you run `beancount-staging`, it will look at all the staging transactions and attempt to find a matching already present transaction in the journal.
