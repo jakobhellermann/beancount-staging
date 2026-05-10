@@ -112,7 +112,7 @@ fn read_directives_from_command(
 ) -> Result<(Vec<Directive>, HashSet<PathBuf>)> {
     use anyhow::Context;
     use std::process::{Command, Stdio};
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     if command.is_empty() {
         anyhow::bail!("Command cannot be empty");
@@ -121,13 +121,32 @@ fn read_directives_from_command(
     let command_str = command.join(" ");
 
     let start = Instant::now();
-    let output = Command::new(&command[0])
+    let mut child = Command::new(&command[0])
         .args(&command[1..])
         .current_dir(cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .with_context(|| format!("Failed to execute staging command: {}", command_str))?;
+
+    // If the command takes longer than the threshold, log a notice so the
+    // user knows why they're waiting.
+    const ANNOUNCE_AFTER: Duration = Duration::from_millis(500);
+    let mut announced = false;
+    loop {
+        if !announced && start.elapsed() >= ANNOUNCE_AFTER {
+            tracing::info!("Running staging command: {}", command_str);
+            announced = true;
+        }
+        if child.try_wait()?.is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    let output = child
+        .wait_with_output()
+        .with_context(|| format!("Failed to wait for staging command: {}", command_str))?;
     let elapsed = start.elapsed();
 
     tracing::info!("Staging command executed in {:?}", elapsed);

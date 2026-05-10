@@ -2,4 +2,4 @@
 files = ["docs/examples/journal.beancount"]
 
 [staging]
-files = ["docs/examples/staging.beancount"]
+command = ["sh", "-c", "sleep 2; cat docs/examples/staging.beancount"]
