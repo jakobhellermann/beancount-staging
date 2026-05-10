@@ -360,9 +360,9 @@ async fn test_auto_categorize_hides_matching_transaction() {
     let staging = vec![staging_path];
 
     let rules = vec![AutoCategorizeRule {
-        payee: regex::Regex::new("PayPal Europe").unwrap(),
-        source_account: "Assets:BIBEssen:Checking".to_string(),
-        target_account: "Assets:ZeroSum:Transfers".to_string(),
+        match_source_account: "Assets:BIBEssen:Checking".to_string(),
+        match_payee: regex::Regex::new("PayPal Europe").unwrap(),
+        assign_target_account: "Assets:ZeroSum:Transfers".to_string(),
     }];
 
     tokio::spawn(async move {

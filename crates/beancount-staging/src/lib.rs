@@ -24,15 +24,15 @@ use std::{io::BufWriter, path::Path};
 
 /// A rule for auto-categorizing staging transactions.
 ///
-/// When a staging transaction's payee matches the `payee` regex (as a
-/// substring, not anchored) and its first posting's account equals
-/// `source_account`, the transaction is committed to the journal with
-/// `target_account` as the balancing posting — without UI review.
+/// When a staging transaction's first posting's account equals
+/// `match_source_account` and its payee matches the `match_payee` regex (as a
+/// substring, not anchored), the transaction is committed to the journal with
+/// `assign_target_account` as the balancing posting — without UI review.
 #[derive(Debug, Clone)]
 pub struct AutoCategorizeRule {
-    pub payee: regex::Regex,
-    pub source_account: String,
-    pub target_account: String,
+    pub match_source_account: String,
+    pub match_payee: regex::Regex,
+    pub assign_target_account: String,
 }
 
 impl AutoCategorizeRule {
@@ -43,13 +43,13 @@ impl AutoCategorizeRule {
         let Some(payee) = &txn.payee else {
             return false;
         };
-        if !self.payee.is_match(payee) {
+        if !self.match_payee.is_match(payee) {
             return false;
         }
         let Some(first_posting) = txn.postings.first() else {
             return false;
         };
-        first_posting.account.to_string() == self.source_account
+        first_posting.account.to_string() == self.match_source_account
     }
 }
 
@@ -576,9 +576,9 @@ mod tests {
 
     fn make_rule(payee_pattern: &str, source: &str, target: &str) -> AutoCategorizeRule {
         AutoCategorizeRule {
-            payee: regex::Regex::new(payee_pattern).unwrap(),
-            source_account: source.to_string(),
-            target_account: target.to_string(),
+            match_source_account: source.to_string(),
+            match_payee: regex::Regex::new(payee_pattern).unwrap(),
+            assign_target_account: target.to_string(),
         }
     }
 
@@ -665,7 +665,7 @@ mod tests {
             make_rule("PayPal Spotify", "Assets:BIBEssen:Checking", "Z"),
         ];
         let matched = find_matching_rule(&directive, &rules).unwrap();
-        assert_eq!(matched.target_account, "Assets:ZeroSum:Transfers");
+        assert_eq!(matched.assign_target_account, "Assets:ZeroSum:Transfers");
     }
 
     fn parse_txn(content: &str) -> Transaction {

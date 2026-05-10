@@ -273,7 +273,7 @@ impl AppStateInner {
     /// Decide whether a staging directive should be auto-committed.
     fn decide_auto_commit<'a>(&'a self, directive: &Directive) -> Option<AutoCommitDecision<'a>> {
         if let Some(rule) = beancount_staging::find_matching_rule(directive, &self.auto_rules) {
-            return Some(AutoCommitDecision::Rule(&rule.target_account));
+            return Some(AutoCommitDecision::Rule(&rule.assign_target_account));
         }
         match &directive.content {
             DirectiveContent::Transaction(txn)

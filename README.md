@@ -90,6 +90,19 @@ ingest = beangulp.Ingest(CONFIG, HOOKS)
 ingest()
 ```
 
+### Auto-categorization
+
+Recurring transactions can bypass the UI via `[[auto_categorize]]` rules:
+
+```toml
+[[auto_categorize]]
+match_source_account = "Assets:MyBank:Checking"
+match_payee = "^MyGym" # regex, substring match
+assign_target_account = "Expenses:Gym"
+```
+
+Already-balanced `*`-flagged transactions and standalone balance directives are also auto-committed.
+
 ## How it works
 
 When you run `beancount-staging`, it will look at all the staging transactions and attempt to find a matching already present transaction in the journal.

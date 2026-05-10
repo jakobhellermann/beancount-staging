@@ -45,24 +45,28 @@ impl TryFrom<RawConfigStaging> for ConfigStaging {
 
 /// TOML schema for an auto-categorization rule.
 ///
-/// `payee` is a regex applied as substring match (not anchored). Use `^...$`
-/// for exact matches.
+/// `match_payee` is a regex applied as substring match (not anchored). Use
+/// `^...$` for exact matches.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigAutoCategorizeRule {
-    pub payee: String,
-    pub source_account: String,
-    pub target_account: String,
+    pub match_source_account: String,
+    pub match_payee: String,
+    pub assign_target_account: String,
 }
 
 impl ConfigAutoCategorizeRule {
     pub fn compile(self) -> Result<AutoCategorizeRule> {
-        let payee = regex::Regex::new(&self.payee)
-            .with_context(|| format!("Invalid regex in auto_categorize.payee: {:?}", self.payee))?;
+        let match_payee = regex::Regex::new(&self.match_payee).with_context(|| {
+            format!(
+                "Invalid regex in auto_categorize.match_payee: {:?}",
+                self.match_payee
+            )
+        })?;
         Ok(AutoCategorizeRule {
-            payee,
-            source_account: self.source_account,
-            target_account: self.target_account,
+            match_source_account: self.match_source_account,
+            match_payee,
+            assign_target_account: self.assign_target_account,
         })
     }
 }
