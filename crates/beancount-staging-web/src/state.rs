@@ -195,7 +195,11 @@ impl AppStateInner {
             };
 
             let txn = directive.content.as_transaction();
-            let payee = txn.and_then(|t| t.payee.as_deref()).unwrap_or("");
+            // Prefer payee for the log; fall back to narration since pre-balanced
+            // imports often have only narration.
+            let label = txn
+                .and_then(|t| t.payee.as_deref().or(t.narration.as_deref()))
+                .unwrap_or("");
             let amount = txn
                 .and_then(|t| t.postings.first())
                 .and_then(|p| p.amount.as_ref())
@@ -209,16 +213,12 @@ impl AppStateInner {
                 beancount_staging::SourceMetaTarget::Transaction,
                 journal_path,
             ) {
-                tracing::error!(
-                    "Failed to auto-commit transaction (payee={:?}): {}",
-                    payee,
-                    e
-                );
+                tracing::error!("Failed to auto-commit transaction ({:?}): {}", label, e);
             } else {
                 let target_desc = target_account.unwrap_or("(pre-balanced)");
                 committed_lines.push(format!(
                     "{} {:?} ({}) -> {}",
-                    directive.date, payee, amount, target_desc,
+                    directive.date, label, amount, target_desc,
                 ));
             }
         }
