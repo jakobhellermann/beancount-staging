@@ -122,6 +122,27 @@ pub struct AppStateInner {
     pub predictor: Option<DecisionTreePredictor<Alpha>>,
 }
 
+/// Why an `OnlyInStaging` directive may be auto-committed.
+#[derive(Debug)]
+enum AutoCommitDecision<'a> {
+    /// A user-configured `[[auto_categorize]]` rule matched. The wrapped
+    /// account becomes the balancing posting.
+    Rule(&'a str),
+    /// The directive is unambiguous on its own (a `*`-flagged balanced
+    /// transaction, or a balance directive — both commit verbatim).
+    AcceptAsIs,
+}
+
+impl AutoCommitDecision<'_> {
+    /// The expense-account override to pass to `commit_transaction`, if any.
+    fn target_account(&self) -> Option<&str> {
+        match self {
+            AutoCommitDecision::Rule(account) => Some(account),
+            AutoCommitDecision::AcceptAsIs => None,
+        }
+    }
+}
+
 impl AppStateInner {
     fn new(
         journal_paths: Vec<PathBuf>,
@@ -190,32 +211,49 @@ impl AppStateInner {
             let ReconcileItemKind::OnlyInStaging(directive) = item.item else {
                 continue;
             };
-            let Some(target_account) = self.decide_auto_commit_target(directive) else {
+            let Some(decision) = self.decide_auto_commit(directive) else {
                 continue;
             };
 
-            let txn = directive.content.as_transaction();
-            // Prefer payee for the log; fall back to narration since pre-balanced
-            // imports often have only narration.
-            let label = txn
-                .and_then(|t| t.payee.as_deref().or(t.narration.as_deref()))
-                .unwrap_or("");
-            let amount = txn
-                .and_then(|t| t.postings.first())
-                .and_then(|p| p.amount.as_ref())
-                .map(|a| format!("{} {}", a.value, a.currency))
-                .unwrap_or_else(|| "?".to_string());
+            let (label, amount, target_desc) = match &directive.content {
+                DirectiveContent::Transaction(txn) => {
+                    // Prefer payee for the log; fall back to narration since
+                    // pre-balanced imports often have only narration.
+                    let label = txn
+                        .payee
+                        .as_deref()
+                        .or(txn.narration.as_deref())
+                        .unwrap_or("")
+                        .to_string();
+                    let amount = txn
+                        .postings
+                        .first()
+                        .and_then(|p| p.amount.as_ref())
+                        .map(|a| format!("{} {}", a.value, a.currency))
+                        .unwrap_or_else(|| "?".to_string());
+                    let target_desc = match &decision {
+                        AutoCommitDecision::Rule(account) => account.to_string(),
+                        AutoCommitDecision::AcceptAsIs => "(pre-balanced)".to_string(),
+                    };
+                    (label, amount, target_desc)
+                }
+                DirectiveContent::Balance(bal) => {
+                    let label = bal.account.to_string();
+                    let amount = format!("{} {}", bal.amount.value, bal.amount.currency);
+                    (label, amount, "(balance)".to_string())
+                }
+                _ => continue,
+            };
             if let Err(e) = beancount_staging::commit_transaction(
                 directive,
-                target_account,
+                decision.target_account(),
                 None,
                 None,
                 beancount_staging::SourceMetaTarget::Transaction,
                 journal_path,
             ) {
-                tracing::error!("Failed to auto-commit transaction ({:?}): {}", label, e);
+                tracing::error!("Failed to auto-commit directive ({:?}): {}", label, e);
             } else {
-                let target_desc = target_account.unwrap_or("(pre-balanced)");
                 committed_lines.push(format!(
                     "{} {:?} ({}) -> {}",
                     directive.date, label, amount, target_desc,
@@ -232,20 +270,22 @@ impl AppStateInner {
         committed_lines.len()
     }
 
-    /// Returns `Some(Some(target))` for a rule-matched commit,
-    /// `Some(None)` for a pre-balanced no-override commit, or
-    /// `None` if the transaction should be left for UI review.
-    fn decide_auto_commit_target<'a>(&'a self, directive: &Directive) -> Option<Option<&'a str>> {
+    /// Decide whether a staging directive should be auto-committed.
+    fn decide_auto_commit<'a>(&'a self, directive: &Directive) -> Option<AutoCommitDecision<'a>> {
         if let Some(rule) = beancount_staging::find_matching_rule(directive, &self.auto_rules) {
-            return Some(Some(&rule.target_account));
+            return Some(AutoCommitDecision::Rule(&rule.target_account));
         }
-        if let DirectiveContent::Transaction(txn) = &directive.content
-            && txn.flag != Some('!')
-            && beancount_staging::is_transaction_balanced(txn)
-        {
-            return Some(None);
+        match &directive.content {
+            DirectiveContent::Transaction(txn)
+                if txn.flag != Some('!') && beancount_staging::is_transaction_balanced(txn) =>
+            {
+                Some(AutoCommitDecision::AcceptAsIs)
+            }
+            // Balance directives carry no ambiguity (they only match if
+            // identical), so we always auto-commit them.
+            DirectiveContent::Balance(_) => Some(AutoCommitDecision::AcceptAsIs),
+            _ => None,
         }
-        None
     }
 
     pub fn retrain(&mut self) -> anyhow::Result<()> {

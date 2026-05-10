@@ -520,3 +520,69 @@ async fn test_auto_commit_balanced_starred_transaction() {
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_auto_commit_balance_directive() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("beancount-auto-balance-dir-{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let journal_path = temp_dir.join("journal.beancount");
+    let staging_path = temp_dir.join("staging.beancount");
+
+    std::fs::write(
+        &journal_path,
+        r#"
+2024-01-01 open Assets:Checking
+"#,
+    )
+    .unwrap();
+
+    // A balance directive only in staging should be auto-committed.
+    std::fs::write(
+        &staging_path,
+        r#"
+2024-04-30 balance Assets:Checking  1234.56 EUR
+"#,
+    )
+    .unwrap();
+
+    let journal = vec![journal_path.clone()];
+    let staging = vec![staging_path];
+
+    tokio::spawn(async move {
+        beancount_staging_web::run(
+            journal,
+            StagingSource::Files(staging),
+            Vec::new(),
+            ListenerType::Tcp(8085),
+        )
+        .await
+        .ok();
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    let client = reqwest::Client::new();
+    let init: serde_json::Value = client
+        .get("http://localhost:8085/api/init")
+        .send()
+        .await
+        .expect("init request failed")
+        .json()
+        .await
+        .expect("init json parse failed");
+
+    let item_count = init["items"].as_array().unwrap().len();
+    insta::assert_debug_snapshot!(item_count, @"0");
+
+    let journal_contents = std::fs::read_to_string(&journal_path).unwrap();
+    insta::assert_snapshot!(journal_contents, @r#"
+
+    2024-01-01 open Assets:Checking
+
+    2024-04-30 balance Assets:Checking 1234.56 EUR
+    "#);
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
