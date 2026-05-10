@@ -45,27 +45,42 @@ impl TryFrom<RawConfigStaging> for ConfigStaging {
 
 /// TOML schema for an auto-categorization rule.
 ///
-/// `match_payee` is a regex applied as substring match (not anchored). Use
-/// `^...$` for exact matches.
+/// `match_payee` and `match_narration` are optional regexes applied as
+/// substring matches (not anchored — use `^...$` for exact matches). An
+/// absent filter matches anything.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigAutoCategorizeRule {
     pub match_source_account: String,
-    pub match_payee: String,
+    #[serde(default)]
+    pub match_payee: Option<String>,
+    #[serde(default)]
+    pub match_narration: Option<String>,
     pub assign_target_account: String,
 }
 
 impl ConfigAutoCategorizeRule {
     pub fn compile(self) -> Result<AutoCategorizeRule> {
-        let match_payee = regex::Regex::new(&self.match_payee).with_context(|| {
-            format!(
-                "Invalid regex in auto_categorize.match_payee: {:?}",
-                self.match_payee
-            )
-        })?;
+        let match_payee = self
+            .match_payee
+            .map(|p| {
+                regex::Regex::new(&p).with_context(|| {
+                    format!("Invalid regex in auto_categorize.match_payee: {:?}", p)
+                })
+            })
+            .transpose()?;
+        let match_narration = self
+            .match_narration
+            .map(|p| {
+                regex::Regex::new(&p).with_context(|| {
+                    format!("Invalid regex in auto_categorize.match_narration: {:?}", p)
+                })
+            })
+            .transpose()?;
         Ok(AutoCategorizeRule {
             match_source_account: self.match_source_account,
             match_payee,
+            match_narration,
             assign_target_account: self.assign_target_account,
         })
     }

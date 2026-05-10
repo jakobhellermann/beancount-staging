@@ -97,7 +97,8 @@ Recurring transactions can bypass the UI via `[[auto_categorize]]` rules:
 ```toml
 [[auto_categorize]]
 match_source_account = "Assets:MyBank:Checking"
-match_payee = "^MyGym" # regex, substring match
+match_payee = "^MyGym" # regex, substring match (optional)
+match_narration = "monthly fee" # also optional
 assign_target_account = "Expenses:Gym"
 ```
 

@@ -24,14 +24,19 @@ use std::{io::BufWriter, path::Path};
 
 /// A rule for auto-categorizing staging transactions.
 ///
-/// When a staging transaction's first posting's account equals
-/// `match_source_account` and its payee matches the `match_payee` regex (as a
-/// substring, not anchored), the transaction is committed to the journal with
+/// A rule matches when the staging transaction's first posting's account equals
+/// `match_source_account` and *all* configured filters pass. Each filter is a
+/// regex applied as substring match (use `^...$` to anchor). An absent filter
+/// is treated as "match anything"; an absent target field on the transaction
+/// (e.g. no payee) is treated as the empty string.
+///
+/// When a rule matches, the transaction is committed to the journal with
 /// `assign_target_account` as the balancing posting — without UI review.
 #[derive(Debug, Clone)]
 pub struct AutoCategorizeRule {
     pub match_source_account: String,
-    pub match_payee: regex::Regex,
+    pub match_payee: Option<regex::Regex>,
+    pub match_narration: Option<regex::Regex>,
     pub assign_target_account: String,
 }
 
@@ -40,16 +45,23 @@ impl AutoCategorizeRule {
         let DirectiveContent::Transaction(txn) = &directive.content else {
             return false;
         };
-        let Some(payee) = &txn.payee else {
-            return false;
-        };
-        if !self.match_payee.is_match(payee) {
-            return false;
-        }
         let Some(first_posting) = txn.postings.first() else {
             return false;
         };
-        first_posting.account.to_string() == self.match_source_account
+        if first_posting.account.to_string() != self.match_source_account {
+            return false;
+        }
+        if let Some(re) = &self.match_payee
+            && !re.is_match(txn.payee.as_deref().unwrap_or(""))
+        {
+            return false;
+        }
+        if let Some(re) = &self.match_narration
+            && !re.is_match(txn.narration.as_deref().unwrap_or(""))
+        {
+            return false;
+        }
+        true
     }
 }
 
@@ -577,9 +589,71 @@ mod tests {
     fn make_rule(payee_pattern: &str, source: &str, target: &str) -> AutoCategorizeRule {
         AutoCategorizeRule {
             match_source_account: source.to_string(),
-            match_payee: regex::Regex::new(payee_pattern).unwrap(),
+            match_payee: Some(regex::Regex::new(payee_pattern).unwrap()),
+            match_narration: None,
             assign_target_account: target.to_string(),
         }
+    }
+
+    #[test]
+    fn auto_rule_no_filters_matches_any_payee() {
+        let directive = parse_directive(
+            r#"2024-01-15 ! "Anything" "x"
+    Assets:BIBEssen:Checking  -12.99 EUR
+"#,
+        );
+        let rule = AutoCategorizeRule {
+            match_source_account: "Assets:BIBEssen:Checking".to_string(),
+            match_payee: None,
+            match_narration: None,
+            assign_target_account: "X".to_string(),
+        };
+        assert!(rule.matches(&directive));
+    }
+
+    #[test]
+    fn auto_rule_narration_filter() {
+        let with_keyword = parse_directive(
+            r#"2024-01-15 ! "Bank" "Bankgutschrift auf PayPal-Konto"
+    Assets:BIBEssen:Checking  -12.99 EUR
+"#,
+        );
+        let without_keyword = parse_directive(
+            r#"2024-01-15 ! "Bank" "Some other narration"
+    Assets:BIBEssen:Checking  -12.99 EUR
+"#,
+        );
+        let rule = AutoCategorizeRule {
+            match_source_account: "Assets:BIBEssen:Checking".to_string(),
+            match_payee: None,
+            match_narration: Some(regex::Regex::new("Bankgutschrift").unwrap()),
+            assign_target_account: "X".to_string(),
+        };
+        assert!(rule.matches(&with_keyword));
+        assert!(!rule.matches(&without_keyword));
+    }
+
+    #[test]
+    fn auto_rule_payee_and_narration_both_required() {
+        let directive = parse_directive(
+            r#"2024-01-15 ! "PayPal" "Bankgutschrift"
+    Assets:BIBEssen:Checking  -12.99 EUR
+"#,
+        );
+        let both_match = AutoCategorizeRule {
+            match_source_account: "Assets:BIBEssen:Checking".to_string(),
+            match_payee: Some(regex::Regex::new("PayPal").unwrap()),
+            match_narration: Some(regex::Regex::new("Bankgutschrift").unwrap()),
+            assign_target_account: "X".to_string(),
+        };
+        let narration_misses = AutoCategorizeRule {
+            match_source_account: "Assets:BIBEssen:Checking".to_string(),
+            match_payee: Some(regex::Regex::new("PayPal").unwrap()),
+            match_narration: Some(regex::Regex::new("Spotify").unwrap()),
+            assign_target_account: "X".to_string(),
+        };
+        assert!(both_match.matches(&directive));
+        assert!(!narration_misses.matches(&directive));
     }
 
     #[test]

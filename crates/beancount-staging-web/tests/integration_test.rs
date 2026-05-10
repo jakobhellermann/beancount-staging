@@ -361,7 +361,8 @@ async fn test_auto_categorize_hides_matching_transaction() {
 
     let rules = vec![AutoCategorizeRule {
         match_source_account: "Assets:BIBEssen:Checking".to_string(),
-        match_payee: regex::Regex::new("PayPal Europe").unwrap(),
+        match_payee: Some(regex::Regex::new("PayPal Europe").unwrap()),
+        match_narration: None,
         assign_target_account: "Assets:ZeroSum:Transfers".to_string(),
     }];
 
