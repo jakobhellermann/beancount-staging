@@ -121,7 +121,7 @@ fn read_directives_from_command(
     let command_str = command.join(" ");
 
     let start = Instant::now();
-    let mut child = Command::new(&command[0])
+    let child = Command::new(&command[0])
         .args(&command[1..])
         .current_dir(cwd)
         .stdout(Stdio::piped())
@@ -130,23 +130,28 @@ fn read_directives_from_command(
         .with_context(|| format!("Failed to execute staging command: {}", command_str))?;
 
     // If the command takes longer than the threshold, log a notice so the
-    // user knows why they're waiting.
+    // user knows why they're waiting. The announcement runs on a separate
+    // thread so the main thread can drain stdout/stderr via wait_with_output;
+    // otherwise a child writing more than the pipe buffer would block on
+    // write() and never exit.
     const ANNOUNCE_AFTER: Duration = Duration::from_millis(500);
-    let mut announced = false;
-    loop {
-        if !announced && start.elapsed() >= ANNOUNCE_AFTER {
-            tracing::info!("Running staging command: {}", command_str);
-            announced = true;
-        }
-        if child.try_wait()?.is_some() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+    let announcer = {
+        let command_str = command_str.clone();
+        std::thread::spawn(move || {
+            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                done_rx.recv_timeout(ANNOUNCE_AFTER)
+            {
+                tracing::info!("Running staging command: {}", command_str);
+            }
+        })
+    };
 
     let output = child
         .wait_with_output()
         .with_context(|| format!("Failed to wait for staging command: {}", command_str))?;
+    let _ = done_tx.send(());
+    let _ = announcer.join();
     let elapsed = start.elapsed();
 
     tracing::info!("Staging command executed in {:?}", elapsed);
